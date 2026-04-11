@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iPad System Dynamics - Pro Pan/Zoom & Pencil Only</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; }
+        #board-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+        .canvas-layer { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
+        #board { background-color: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); z-index: 1; }
+        #preview-canvas { z-index: 2; pointer-events: none; } 
+        
+        #toolbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; z-index: 10; width: 95%; max-width: 1350px; }
+        .tool-group { display: flex; align-items: center; gap: 5px; border-right: 1px solid #ccc; padding-right: 8px; margin-right: 2px; }
+        .tool-group:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+        
+        button { padding: 6px 12px; border: none; border-radius: 15px; background: #e0e0e0; font-size: 14px; cursor: pointer; transition: 0.1s; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+        button.active { background: #007aff; color: white; }
+        button.danger { background: #ff3b30; color: white; }
+        button.action-btn { background: #ff9500; color: white; }
+        
+        .color-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+        .color-btn.active { border-color: #333; transform: scale(1.1); }
+        
+        .size-check { display: flex; align-items: center; gap: 3px; cursor: pointer; background: #f5f5f5; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+        .size-check:hover { background: #e0e0e0; }
+        .size-check input[type="radio"] { cursor: pointer; margin: 0; }
+
+        .shape-control-group { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+        #curvature-control { display: none; } 
+        #curvature-slider { width: 100px; }
+        #double-edge-control { display: none; } 
+        #double-edge-check { cursor: pointer; }
+        #text-size-control { display: none; }
+        #text-size-input { width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 14px; outline: none; }
+        #text-size-input:focus { border-color: #007aff; }
+    </style>
+</head>
+<body>
+    <div id="board-container">
+        <canvas id="board" class="canvas-layer"></canvas>
+        <canvas id="preview-canvas" class="canvas-layer"></canvas> 
+    </div>
+
+    <div id="toolbar">
+        <div class="tool-group">
+            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')">✍️ เส้น</button>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <button id="btn-text" class="tool-btn" onclick="setTool('text')">🔤 พิมพ์</button>
+                <div id="text-size-control" class="shape-control-group">
+                    <label style="cursor: default;">ขนาด:</label>
+                    <input type="number" id="text-size-input" min="10" max="150" value="24" oninput="setTextSize(this.value)"> px
+                </div>
+            </div>
+            <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')">🧹 ลบ</button>
+        </div>
+        <div class="tool-group">
+            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')">🟩 กล่อง</button>
+            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')">☁️ เมฆ</button>
+            <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')">⏳ วาล์วนอน</button>
+            <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')">⌛ วาล์วตั้ง</button>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')">⭕ วงกลม</button>
+                <div id="double-edge-control" class="shape-control-group">
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 3px;">
+                        <input type="checkbox" id="double-edge-check" onchange="toggleDoubleEdge()"> ขอบคู่
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="tool-group">
+            <button id="btn-s-arrow-s" class="tool-btn" onclick="setTool('straight-arrow-solid')">↑ ทึบ</button>
+            <button id="btn-s-arrow-d" class="tool-btn" onclick="setTool('straight-arrow-dashed')">↑ ประ</button>
+            <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')">⤴ ทึบ</button>
+            <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')">⤴ ประ</button>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')">弧 ประโค้ง</button>
+                <div id="curvature-control" class="shape-control-group">
+                    <label style="cursor: default;">โค้ง:</label>
+                    <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
+                </div>
+            </div>
+        </div>
+        
+        <div class="tool-group size-picker">
+            <label class="size-check"><input type="radio" name="penSize" value="2" onchange="setSize(2)"> เล็ก</label>
+            <label class="size-check"><input type="radio" name="penSize" value="4" checked onchange="setSize(4)"> กลาง</label>
+            <label class="size-check"><input type="radio" name="penSize" value="12" onchange="setSize(12)"> ใหญ่</label>
+        </div>
+
+        <div class="tool-group color-picker">
+            <button class="color-btn active" style="background-color: #000000;" onclick="setColor('#000000', this)"></button>
+            <button class="color-btn" style="background-color: #FF3B30;" onclick="setColor('#FF3B30', this)"></button>
+            <button class="color-btn" style="background-color: #007AFF;" onclick="setColor('#007AFF', this)"></button>
+        </div>
+
+        <div class="tool-group">
+            <button class="action-btn" onclick="resetView()" style="margin-right: 5px;">🔍 คืนมุมมอง</button>
+            <button class="action-btn" onclick="undo()" style="margin-right: 5px;">↩️ ย้อน</button>
+            <button class="action-btn" onclick="saveImage()" style="margin-right: 5px;">💾 บันทึก</button>
+            <button class="action-btn" onclick="shareImage()" style="margin-right: 5px;">📲 แชร์</button>
+            <button class="danger" onclick="clearBoard()">🗑️ ล้าง</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const pCtx = previewCanvas.getContext('2d');
+        const container = document.getElementById('board-container');
+        
+        const curvatureControl = document.getElementById('curvature-control');
+        const doubleEdgeControl = document.getElementById('double-edge-control');
+        const doubleEdgeCheck = document.getElementById('double-edge-check');
+        const textSizeControl = document.getElementById('text-size-control');
+        const textSizeInput = document.getElementById('text-size-input'); 
+        
+        // --- สถานะของแอป ---
+        let currentTool = 'pen';
+        let currentColor = '#000000';
+        let currentBaseSize = 4;
+        let currentCurvatureFactor = 50; 
+        let currentTextSize = 24;
+        let isDoubleCircle = false; 
+        
+        // --- สถานะการวาด ---
+        let isDrawing = false;
+        let isDraggingArrow = false; 
+        let arrowStartPoint = null; 
+        let sceneObjects = []; 
+        let currentPath = null;
+        let lastPoint = null;
+        let activeTextInput = null; 
+
+        // --- ระบบกล้อง (Pan & Zoom) ---
+        let camera = { x: 0, y: 0, scale: 1 };
+        let activeTouchPointers = new Map();
+        let isPanning = false;
+        let startPan = { x: 0, y: 0 };
+        let startCam = { x: 0, y: 0 };
+        let initialPinchDist = 0;
+        let initialScale = 1;
+        let pinchCenter = { x: 0, y: 0 };
+
+        const SHAPE = { RECT_W: 160, RECT_H: 80, CLOUD_W: 140, CLOUD_H: 90, VALVE_W: 60, VALVE_H: 40 };
+
+        function applyCamera(context) {
+            const dpr = window.devicePixelRatio || 1;
+            context.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, camera.x * dpr, camera.y * dpr);
+        }
+
+        function resetView() {
+            camera = { x: 0, y: 0, scale: 1 };
+            renderScene();
+        }
+
+        function getWorldPos(screenX, screenY) {
+            return {
+                x: (screenX - camera.x) / camera.scale,
+                y: (screenY - camera.y) / camera.scale
+            };
+        }
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            
+            [canvas, previewCanvas].forEach(c => {
+                c.width = w * dpr;
+                c.height = h * dpr;
+                c.style.width = w + 'px';
+                c.style.height = h + 'px';
+            });
+            renderScene();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function setTool(tool) {
+            if (activeTextInput) finalizeTextInput();
+
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c')}`;
+            const btn = document.getElementById(btnId);
+            if(btn) btn.classList.add('active');
+
+            curvatureControl.style.display = currentTool.includes('curved') ? 'flex' : 'none';
+            doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
+            textSizeControl.style.display = currentTool === 'text' ? 'flex' : 'none';
+        }
+
+        function setColor(color, btnElement) {
+            currentColor = color;
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+            if(activeTextInput) activeTextInput.style.color = currentColor;
+            if(currentTool === 'eraser') setTool('pen');
+        }
+
+        function setSize(size) { currentBaseSize = parseInt(size); }
+        function setCurvature(value) { currentCurvatureFactor = parseInt(value); } 
+        function setTextSize(value) { 
+            const parsedValue = parseInt(value);
+            if (!isNaN(parsedValue) && parsedValue > 0) {
+                currentTextSize = parsedValue; 
+                if(activeTextInput) activeTextInput.style.fontSize = (parsedValue * camera.scale) + 'px'; // ปรับสเกลขณะพิมพ์
+            }
+        }
+        function toggleDoubleEdge() { isDoubleCircle = doubleEdgeCheck.checked; } 
+        
+        function clearBoard() { sceneObjects = []; resetView(); }
+        function undo() {
+            if (activeTextInput) finalizeTextInput();
+            if (sceneObjects.length > 0) {
+                sceneObjects.pop(); 
+                renderScene();      
+            }
+        }
+
+        function getCanvasWithWhiteBackground() {
+            const tempCanvas = document.createElement('canvas');
+            const dpr = window.devicePixelRatio || 1;
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.fillStyle = 'white';
+            tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(canvas, 0, 0);
+            return tempCanvas;
+        }
+
+        function saveImage() {
+            const link = document.createElement('a');
+            link.download = 'sd-diagram.png';
+            link.href = getCanvasWithWhiteBackground().toDataURL('image/png');
+            link.click();
+        }
+
+        async function shareImage() {
+            getCanvasWithWhiteBackground().toBlob(async (blob) => {
+                if (navigator.share) {
+                    const file = new File([blob], 'sd-diagram.png', { type: 'image/png' });
+                    try { await navigator.share({ files: [file], title: 'System Dynamics Diagram' }); } 
+                    catch (error) { console.log('ยกเลิกการแชร์:', error); }
+                } else { alert('เบราว์เซอร์ไม่รองรับการแชร์ไฟล์ภาพ กรุณาใช้ปุ่มบันทึกแทน'); }
+            }, 'image/png');
+        }
+
+        // --- คำนวณตรรกะพิกัดและการดูดติดขอบ ---
+        function getAlignedY(newY, threshold = 60) {
+            for (let obj of sceneObjects) {
+                if (obj.type === 'rect' || obj.type === 'cloud' || obj.type === 'valve-h') {
+                    if (Math.abs(obj.y - newY) < threshold) {
+                        return obj.y; 
+                    }
+                }
+            }
+            return newY;
+        }
+
+        function getShapeBox(obj) {
+            let box = null;
+            if (obj.type === 'rect') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            else if (obj.type === 'cloud') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            else if (obj.type === 'valve-h' || obj.type === 'valve-v') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            else if (obj.type === 'circle') box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
+            
+            if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v');
+            return box;
+        }
+
+        function isPointInOrNearBox(px, py, box) {
+            const pad = 30; // พิกัดในโลกจำลอง ไม่ได้รับผลกระทบจากซูม
+            return px >= box.left - pad && px <= box.right + pad && py >= box.top - pad && py <= box.bottom + pad;
+        }
+
+        function calculateSnapPoints(p1, p2) {
+            let srcBox = null, dstBox = null;
+            for (let obj of sceneObjects) {
+                let box = getShapeBox(obj);
+                if (box) {
+                    if (!srcBox && isPointInOrNearBox(p1.x, p1.y, box)) srcBox = box;
+                    if (!dstBox && isPointInOrNearBox(p2.x, p2.y, box) && box !== srcBox) dstBox = box;
+                }
+            }
+
+            if (srcBox && dstBox) {
+                const dx = dstBox.cx - srcBox.cx;
+                const dy = dstBox.cy - srcBox.cy;
+                let p1x, p1y, p2x, p2y;
+
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    if (dx > 0) {
+                        p1x = srcBox.isValve ? srcBox.cx : srcBox.right; p1y = srcBox.cy;
+                        p2x = dstBox.isValve ? dstBox.cx : dstBox.left; p2y = dstBox.cy;
+                    } else {
+                        p1x = srcBox.isValve ? srcBox.cx : srcBox.left; p1y = srcBox.cy;
+                        p2x = dstBox.isValve ? dstBox.cx : dstBox.right; p2y = dstBox.cy;
+                    }
+                } else {
+                    if (dy > 0) {
+                        p1x = srcBox.cx; p1y = srcBox.isValve ? srcBox.cy : srcBox.bottom;
+                        p2x = dstBox.cx; p2y = dstBox.isValve ? dstBox.cy : dstBox.top;
+                    } else {
+                        p1x = srcBox.cx; p1y = srcBox.isValve ? srcBox.cy : srcBox.top;
+                        p2x = dstBox.cx; p2y = dstBox.isValve ? dstBox.cy : dstBox.bottom;
+                    }
+                }
+                return { p1: {x: p1x, y: p1y}, p2: {x: p2x, y: p2y} };
+            }
+            return { p1, p2 };
+        }
+
+        // --- ระบบวาดรูปทรง ---
+        function drawArrowhead(c, x, y, angle, color) {
+            const size = 14; 
+            c.save(); c.translate(x, y); c.rotate(angle);
+            c.beginPath(); c.moveTo(0, 0); c.lineTo(-size, -size * 0.5); c.lineTo(-size * 0.8, 0); c.lineTo(-size, size * 0.5); c.closePath();
+            c.fillStyle = color; c.fill(); c.restore();
+        }
+
+        function drawCloudShape(c, x, y, w, h, color) {
+            c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
+            c.bezierCurveTo(x - w * 0.1, y + h * 0.8, x - w * 0.1, y + h * 0.3, x + w * 0.2, y + h * 0.3);
+            c.bezierCurveTo(x + w * 0.2, y - h * 0.1, x + w * 0.7, y - h * 0.1, x + w * 0.7, y + h * 0.2);
+            c.bezierCurveTo(x + w * 1.1, y + h * 0.2, x + w * 1.1, y + h * 0.8, x + w * 0.8, y + h * 0.8);
+            c.closePath();
+            c.strokeStyle = color; c.lineWidth = 4; c.fillStyle = '#ffffff'; c.fill(); c.stroke();
+        }
+
+        function drawValveShape(c, obj) {
+            c.beginPath();
+            if (obj.type === 'valve-h') {
+                c.moveTo(obj.x, obj.y); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x, obj.y + obj.h); c.closePath();
+                c.moveTo(obj.x + obj.w, obj.y); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x + obj.w, obj.y + obj.h); c.closePath();
+            } else {
+                c.moveTo(obj.x, obj.y); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x + obj.w, obj.y); c.closePath();
+                c.moveTo(obj.x, obj.y + obj.h); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x + obj.w, obj.y + obj.h); c.closePath();
+            }
+            c.strokeStyle = obj.color; c.lineWidth = 4; c.stroke();
+        }
+
+        function getArrowAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
+        function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
+
+        function drawStraightArrow(c, obj, isPreview = false) {
+            c.beginPath(); c.moveTo(obj.p1.x, obj.p1.y); c.lineTo(obj.p2.x, obj.p2.y);
+            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false); 
+            if(!isPreview) drawArrowhead(c, obj.p2.x, obj.p2.y, getArrowAngle(obj.p1, obj.p2), obj.color);
+        }
+
+        function drawAngledArrow(c, obj, isPreview = false) {
+            const handle = { x: obj.p1.x, y: obj.p2.y }; 
+            c.beginPath(); c.moveTo(obj.p1.x, obj.p1.y); c.lineTo(handle.x, handle.y); c.lineTo(obj.p2.x, obj.p2.y);
+            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
+            if(!isPreview) drawArrowhead(c, obj.p2.x, obj.p2.y, getArrowAngle(handle, obj.p2), obj.color);
+        }
+
+        function drawCurvedArrow(c, obj, isPreview = false) {
+            const p1 = obj.p1, p2 = obj.p2;
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < 1) return;
+
+            let h = Math.max(1, Math.min(Math.abs(obj.curvatureFactor), d / 2));
+            const bowOutward = obj.curvatureFactor >= 0;
+            
+            const r = (d * d) / (8 * h) + (h / 2);
+            const k = r - h;
+            let nx = -dy / d, ny = dx / d;
+            if (!bowOutward) { nx = -nx; ny = -ny; }
+
+            const cx = (p1.x + p2.x) / 2 - k * nx;
+            const cy = (p1.y + p2.y) / 2 - k * ny;
+            const startAngle = Math.atan2(p1.y - cy, p1.x - cx);
+            const endAngle = Math.atan2(p2.y - cy, p2.x - cx);
+            const ccw = bowOutward ? true : false;
+
+            c.beginPath(); c.arc(cx, cy, r, startAngle, endAngle, ccw);
+            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
+            if (!isPreview) drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color);
+        }
+
+        function drawPreviewArrow(p1, p2) {
+            pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            applyCamera(pCtx);
+            
+            let snapped = { p1, p2 };
+            if (currentTool !== 'curved-arrow-dashed') {
+                snapped = calculateSnapPoints(p1, p2); 
+            }
+
+            const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor }; 
+            if (currentTool.includes('straight')) drawStraightArrow(pCtx, obj, true);
+            else if (currentTool.includes('angled')) drawAngledArrow(pCtx, obj, true);
+            else if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
+        }
+
+        function drawSegment(c, p1, p2, pathData) {
+            c.lineCap = 'round'; c.lineJoin = 'round';
+            c.globalCompositeOperation = pathData.type === 'eraser' ? 'destination-out' : 'source-over';
+            c.strokeStyle = pathData.type === 'eraser' ? 'rgba(0,0,0,1)' : (pathData.color || '#000');
+            c.lineWidth = pathData.type === 'eraser' ? pathData.baseSize * 2.5 : pathData.baseSize;
+            c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.stroke();
+            c.globalCompositeOperation = 'source-over';
+        }
+
+        function renderScene() {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            applyCamera(ctx);
+            
+            pCtx.setTransform(1, 0, 0, 1, 0, 0);
+            pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            applyCamera(pCtx);
+            
+            sceneObjects.forEach(obj => {
+                if (obj.type === 'pen' || obj.type === 'eraser') {
+                    for (let i = 1; i < obj.points.length; i++) drawSegment(ctx, obj.points[i-1], obj.points[i], obj);
+                } else if (obj.type === 'rect') {
+                    ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
+                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.strokeStyle = obj.color; ctx.lineWidth = 4; ctx.stroke();
+                } else if (obj.type === 'cloud') {
+                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color);
+                } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
+                    drawValveShape(ctx, obj);
+                } else if (obj.type === 'circle') {
+                    ctx.lineWidth = 4; ctx.strokeStyle = obj.color; ctx.fillStyle = '#ffffff';
+                    ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
+                    if (obj.isDouble) { 
+                        ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); 
+                    }
+                    ctx.stroke();
+                } else if (obj.type === 'arrow') {
+                    if (obj.pathType.includes('straight')) drawStraightArrow(ctx, obj);
+                    else if (obj.pathType.includes('angled')) drawAngledArrow(ctx, obj);
+                    else if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
+                } else if (obj.type === 'text') {
+                    ctx.fillStyle = obj.color;
+                    ctx.font = `${obj.fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(obj.text, obj.x, obj.y);
+                }
+            });
+        }
+
+        function finalizeTextInput() {
+            if (activeTextInput) {
+                if (activeTextInput.value.trim() !== '') {
+                    const tx = parseFloat(activeTextInput.getAttribute('data-x'));
+                    const ty = parseFloat(activeTextInput.getAttribute('data-y'));
+                    
+                    sceneObjects.push({ 
+                        type: 'text', 
+                        text: activeTextInput.value, 
+                        x: tx, 
+                        y: ty, 
+                        color: activeTextInput.style.color, 
+                        fontSize: parseInt(activeTextInput.getAttribute('data-size')) 
+                    });
+                    renderScene();
+                }
+                activeTextInput.remove();
+                activeTextInput = null;
+            }
+        }
+
+        // --- ระบบรับข้อมูล Pointer Events (แยกการทำงาน นิ้ว vs ปากกา) ---
+        canvas.addEventListener('pointerdown', (e) => {
+            // ระบบสัมผัสสำหรับเลื่อนและซูม (Touch = Pan/Zoom)
+            if (e.pointerType === 'touch') {
+                if (activeTextInput) finalizeTextInput();
+                activeTouchPointers.set(e.pointerId, e);
+                
+                if (activeTouchPointers.size === 1) {
+                    isPanning = true;
+                    startPan = { x: e.clientX, y: e.clientY };
+                    startCam = { x: camera.x, y: camera.y };
+                } else if (activeTouchPointers.size === 2) {
+                    isPanning = false; 
+                    let pts = Array.from(activeTouchPointers.values());
+                    initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+                    initialScale = camera.scale;
+                    pinchCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
+                    startCam = { x: camera.x, y: camera.y };
+                }
+                return; // หยุดการทำงานถ้าเป็นนิ้ว
+            }
+
+            // ระบบสำหรับวาด (Apple Pencil หรือ Mouse)
+            if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+
+            const worldPos = getWorldPos(e.clientX, e.clientY);
+            const wx = worldPos.x;
+            const wy = worldPos.y;
+            
+            if (activeTextInput) {
+                finalizeTextInput();
+                if (currentTool !== 'text') return; 
+            }
+
+            if (currentTool === 'text') {
+                activeTextInput = document.createElement('input');
+                activeTextInput.type = 'text';
+                activeTextInput.placeholder = 'พิมพ์...';
+                
+                activeTextInput.style.position = 'absolute';
+                activeTextInput.style.left = e.clientX + 'px';
+                activeTextInput.style.top = e.clientY + 'px';
+                activeTextInput.style.transform = 'translate(-50%, -50%)';
+                activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
+                activeTextInput.style.color = currentColor;
+                activeTextInput.style.background = 'rgba(255, 255, 255, 0.9)';
+                activeTextInput.style.border = '2px dashed #007aff';
+                activeTextInput.style.borderRadius = '8px';
+                activeTextInput.style.outline = 'none';
+                activeTextInput.style.padding = '4px 10px';
+                activeTextInput.style.zIndex = '100';
+                activeTextInput.style.fontFamily = 'sans-serif';
+                activeTextInput.style.textAlign = 'center';
+                activeTextInput.style.minWidth = '150px';
+                
+                activeTextInput.setAttribute('data-x', wx);
+                activeTextInput.setAttribute('data-y', wy);
+                activeTextInput.setAttribute('data-size', currentTextSize);
+
+                container.appendChild(activeTextInput);
+                setTimeout(() => activeTextInput.focus(), 50);
+
+                activeTextInput.addEventListener('blur', finalizeTextInput);
+                activeTextInput.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
+                });
+                
+            } else if (currentTool === 'pen' || currentTool === 'eraser') {
+                isDrawing = true; lastPoint = { x: wx, y: wy };
+                currentPath = { type: currentTool, color: currentColor, baseSize: currentBaseSize, points: [lastPoint] };
+                sceneObjects.push(currentPath);
+            } else if (currentTool.includes('arrow')) {
+                isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
+            } else if (currentTool === 'rect') {
+                let targetY = getAlignedY(wy - SHAPE.RECT_H/2); 
+                sceneObjects.push({ type: 'rect', color: currentColor, x: wx - SHAPE.RECT_W/2, y: targetY, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
+                renderScene();
+            } else if (currentTool === 'cloud') {
+                let targetY = getAlignedY(wy - SHAPE.CLOUD_H/2);
+                sceneObjects.push({ type: 'cloud', color: currentColor, x: wx - SHAPE.CLOUD_W/2, y: targetY, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
+                renderScene();
+            } else if (currentTool === 'valve-h') {
+                let targetY = getAlignedY(wy - SHAPE.VALVE_H/2);
+                sceneObjects.push({ type: 'valve-h', color: currentColor, x: wx - SHAPE.VALVE_W/2, y: targetY, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
+                renderScene();
+            } else if (currentTool === 'valve-v') {
+                sceneObjects.push({ type: 'valve-v', color: currentColor, x: wx - SHAPE.VALVE_H/2, y: wy - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
+                renderScene();
+            } else if (currentTool === 'circle') {
+                sceneObjects.push({ type: 'circle', color: currentColor, x: wx, y: wy, radius: 50, isDouble: isDoubleCircle }); 
+                renderScene();
+            }
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            e.preventDefault();
+
+            // ระบบสัมผัสเลื่อนและซูม
+            if (e.pointerType === 'touch') {
+                if (!activeTouchPointers.has(e.pointerId)) return;
+                activeTouchPointers.set(e.pointerId, e);
+                
+                if (activeTouchPointers.size === 1 && isPanning) {
+                    const dx = e.clientX - startPan.x;
+                    const dy = e.clientY - startPan.y;
+                    camera.x = startCam.x + dx;
+                    camera.y = startCam.y + dy;
+                    renderScene();
+                } else if (activeTouchPointers.size === 2) {
+                    let pts = Array.from(activeTouchPointers.values());
+                    let currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+                    let currentCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
+                    
+                    let scaleFactor = currentDist / initialPinchDist;
+                    camera.scale = Math.min(Math.max(initialScale * scaleFactor, 0.2), 5); // กำหนดระยะซูม
+                    
+                    camera.x = currentCenter.x - ((pinchCenter.x - startCam.x) / initialScale) * camera.scale;
+                    camera.y = currentCenter.y - ((pinchCenter.y - startCam.y) / initialScale) * camera.scale;
+                    renderScene();
+                }
+                return;
+            }
+
+            // ระบบวาดเขียน
+            if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+            
+            const worldPos = getWorldPos(e.clientX, e.clientY);
+            if (isDrawing && currentPath) {
+                const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+                for (let ev of events) {
+                    const wPos = getWorldPos(ev.clientX, ev.clientY);
+                    currentPath.points.push(wPos);
+                    if (lastPoint) {
+                        ctx.setTransform(1,0,0,1,0,0);
+                        applyCamera(ctx);
+                        drawSegment(ctx, lastPoint, wPos, currentPath);
+                    }
+                    lastPoint = wPos;
+                }
+            } else if (isDraggingArrow) {
+                drawPreviewArrow(arrowStartPoint, worldPos);
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (e.pointerType === 'touch') {
+                activeTouchPointers.delete(e.pointerId);
+                if (activeTouchPointers.size < 2) {
+                    if (activeTouchPointers.size === 1) {
+                        let remaining = Array.from(activeTouchPointers.values())[0];
+                        startPan = { x: remaining.clientX, y: remaining.clientY };
+                        startCam = { x: camera.x, y: camera.y };
+                        isPanning = true;
+                    } else {
+                        isPanning = false;
+                    }
+                }
+                return;
+            }
+
+            if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+
+            if (isDraggingArrow) {
+                const worldPos = getWorldPos(e.clientX, e.clientY);
+                let snapped = { p1: arrowStartPoint, p2: worldPos };
+                
+                if (currentTool !== 'curved-arrow-dashed') {
+                    snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
+                }
+
+                sceneObjects.push({ 
+                    type: 'arrow', pathType: currentTool, color: currentColor, 
+                    p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor 
+                });
+                
+                pCtx.setTransform(1, 0, 0, 1, 0, 0); 
+                pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
+                renderScene();
+            }
+            isDrawing = false; isDraggingArrow = false; currentPath = null; lastPoint = null; arrowStartPoint = null;
+        });
+
+        // ป้องกันบราวเซอร์เกิดอาการหน่วงจากการเลื่อนหน้าเว็บปกติ
+        [canvas, previewCanvas].forEach(c => {
+            c.addEventListener('touchstart', e => { e.preventDefault(); }, { passive: false });
+            c.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
+        });
+    </script>
+</body>
+</html>
