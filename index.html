@@ -21,6 +21,9 @@
         button.danger { background: #ff3b30; color: white; }
         button.action-btn { background: #ff9500; color: white; }
         
+        button.format-btn { width: 30px; height: 30px; border-radius: 6px; font-size: 14px; background: #e0e0e0; margin: 0 2px; }
+        button.format-btn.active { background: #007aff; color: white; }
+
         .color-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
         .color-btn.active { border-color: #333; transform: scale(1.1); }
         
@@ -33,8 +36,8 @@
         #curvature-slider { width: 80px; }
         #double-edge-control { display: none; } 
         #double-edge-check { cursor: pointer; }
-        #text-size-control { display: none; }
-        #text-size-input { width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 14px; outline: none; }
+        #text-format-control { display: none; background: #f9f9f9; padding: 4px 8px; border-radius: 10px; border: 1px solid #ddd; }
+        #text-size-input { width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 14px; outline: none; margin-right: 5px; }
         #text-size-input:focus { border-color: #007aff; }
         
         .movable-text-input {
@@ -65,9 +68,13 @@
             <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ">✍️</button>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ">🔤</button>
-                <div id="text-size-control" class="shape-control-group">
+                <div id="text-format-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ขนาดตัวอักษร">📏</label>
                     <input type="number" id="text-size-input" min="10" max="150" value="24" oninput="setTextSize(this.value)">
+                    <button class="format-btn" onclick="toggleTextFormat('bold', this)" title="ตัวหนา"><b>B</b></button>
+                    <button class="format-btn" style="font-family: serif;" onclick="toggleTextFormat('italic', this)" title="ตัวเอน"><i>I</i></button>
+                    <button class="format-btn" onclick="toggleTextFormat('underline', this)" title="ขีดเส้นใต้"><u>U</u></button>
+                    <button class="format-btn" style="font-size: 13px; font-weight: bold;" onclick="toggleTextFormat('caps', this)" title="พิมพ์ใหญ่">AA</button>
                 </div>
             </div>
             <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')" title="ยางลบ">🧹</button>
@@ -92,13 +99,15 @@
             <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม">⤴️</button>
             <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⤵️</button>
             <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)">🔀</button>
+
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">弧</button>
+                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">)</button>
                 <div id="curvature-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
                     <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
                 </div>
             </div>
+            <button class="action-btn" onclick="undo()" title="ย้อนกลับการทำงานล่าสุด">↩️</button>
         </div>
         
         <div class="tool-group size-picker">
@@ -117,7 +126,6 @@
         <div class="tool-group">
             <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
-            <button class="action-btn" onclick="undo()" title="ย้อนกลับการทำงานล่าสุด">↩️</button>
             <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ">💾</button>
             <button class="action-btn" onclick="shareImage()" title="แชร์รูปภาพ">📲</button>
             <button class="danger" onclick="clearBoard()" title="ลบภาพทั้งหมดบนกระดาน">🗑️</button>
@@ -134,7 +142,7 @@
         const curvatureControl = document.getElementById('curvature-control');
         const doubleEdgeControl = document.getElementById('double-edge-control');
         const doubleEdgeCheck = document.getElementById('double-edge-check');
-        const textSizeControl = document.getElementById('text-size-control');
+        const textFormatControl = document.getElementById('text-format-control');
         const textSizeInput = document.getElementById('text-size-input'); 
         
         // --- สถานะของแอป ---
@@ -144,6 +152,12 @@
         let currentCurvatureFactor = 50; 
         let currentTextSize = 24;
         let isDoubleCircle = false; 
+
+        // --- สถานะรูปแบบอักษร ---
+        let isTextBold = false;
+        let isTextItalic = false;
+        let isTextUnderline = false;
+        let isTextAllCaps = false;
         
         // --- สถานะการวาด ---
         let isDrawing = false;
@@ -217,7 +231,23 @@
 
             curvatureControl.style.display = currentTool.includes('curved') ? 'flex' : 'none';
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
-            textSizeControl.style.display = currentTool === 'text' ? 'flex' : 'none';
+            textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
+        }
+
+        function toggleTextFormat(format, btn) {
+            btn.classList.toggle('active');
+            const isActive = btn.classList.contains('active');
+            if (format === 'bold') isTextBold = isActive;
+            if (format === 'italic') isTextItalic = isActive;
+            if (format === 'underline') isTextUnderline = isActive;
+            if (format === 'caps') isTextAllCaps = isActive;
+
+            if (activeTextInput) {
+                activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal';
+                activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
+                activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
+                activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
+            }
         }
 
         function setColor(color, btnElement) {
@@ -472,20 +502,27 @@
             c.globalCompositeOperation = 'source-over';
         }
 
-        function drawArrowhead(c, x, y, angle, color) {
-            const size = 14; 
+        function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
+            const size = 12 + (lineWidth * 1.2); 
+            const offset = lineWidth; 
+
             c.save(); c.translate(x, y); c.rotate(angle);
-            c.beginPath(); c.moveTo(0, 0); c.lineTo(-size, -size * 0.5); c.lineTo(-size * 0.8, 0); c.lineTo(-size, size * 0.5); c.closePath();
+            c.beginPath(); 
+            c.moveTo(offset, 0); 
+            c.lineTo(-size + offset, -size * 0.5); 
+            c.lineTo(-size * 0.8 + offset, 0); 
+            c.lineTo(-size + offset, size * 0.5); 
+            c.closePath();
             c.fillStyle = color; c.fill(); c.restore();
         }
 
-        function drawCloudShape(c, x, y, w, h, color) {
+        function drawCloudShape(c, x, y, w, h, color, lineWidth = 4) {
             c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
             c.bezierCurveTo(x - w * 0.1, y + h * 0.8, x - w * 0.1, y + h * 0.3, x + w * 0.2, y + h * 0.3);
             c.bezierCurveTo(x + w * 0.2, y - h * 0.1, x + w * 0.7, y - h * 0.1, x + w * 0.7, y + h * 0.2);
             c.bezierCurveTo(x + w * 1.1, y + h * 0.2, x + w * 1.1, y + h * 0.8, x + w * 0.8, y + h * 0.8);
             c.closePath();
-            c.strokeStyle = color; c.lineWidth = 4; c.fillStyle = '#ffffff'; c.fill(); c.stroke();
+            c.strokeStyle = color; c.lineWidth = lineWidth; c.fillStyle = '#ffffff'; c.fill(); c.stroke();
         }
 
         function drawValveShape(c, obj) {
@@ -497,7 +534,7 @@
                 c.moveTo(obj.x, obj.y); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x + obj.w, obj.y); c.closePath();
                 c.moveTo(obj.x, obj.y + obj.h); c.lineTo(obj.x + obj.w / 2, obj.y + obj.h / 2); c.lineTo(obj.x + obj.w, obj.y + obj.h); c.closePath();
             }
-            c.strokeStyle = obj.color; c.lineWidth = 4; c.stroke();
+            c.strokeStyle = obj.color; c.lineWidth = obj.lineWidth || 4; c.stroke();
         }
 
         function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
@@ -523,8 +560,10 @@
             const ccw = bowOutward ? true : false;
 
             c.beginPath(); c.arc(cx, cy, r, startAngle, endAngle, ccw);
-            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
-            if (!isPreview) drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color);
+            c.strokeStyle = obj.color; c.lineWidth = obj.lineWidth || 4; 
+            setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
+            
+            if (!isPreview) drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
         }
 
         function drawFreehandArrow(c, obj, isPreview = false) {
@@ -537,7 +576,7 @@
             }
 
             c.strokeStyle = isPreview ? '#999' : obj.color;
-            c.lineWidth = 4;
+            c.lineWidth = obj.lineWidth || 4;
             c.lineJoin = 'round'; 
             
             setLineDash(c, obj.pathType.includes('dashed'));
@@ -549,7 +588,7 @@
                 let endPt = obj.points[obj.points.length - 1];
                 let prevPt = obj.points[obj.points.length - 2];
                 const angle = Math.atan2(endPt.y - prevPt.y, endPt.x - prevPt.x);
-                drawArrowhead(c, endPt.x, endPt.y, angle, obj.color);
+                drawArrowhead(c, endPt.x, endPt.y, angle, obj.color, obj.lineWidth || 4);
             }
         }
 
@@ -562,7 +601,7 @@
                 snapped = calculateSnapPoints(p1, p2); 
             }
 
-            const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor }; 
+            const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor, lineWidth: currentBaseSize }; 
             if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
         }
 
@@ -577,13 +616,13 @@
                 } else if (obj.type === 'rect') {
                     ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
                     ctx.fillStyle = '#ffffff'; ctx.fill();
-                    ctx.strokeStyle = obj.color; ctx.lineWidth = 4; ctx.stroke();
+                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'cloud') {
-                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color);
+                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4);
                 } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
                     drawValveShape(ctx, obj);
                 } else if (obj.type === 'circle') {
-                    ctx.lineWidth = 4; ctx.strokeStyle = obj.color; ctx.fillStyle = '#ffffff';
+                    ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = '#ffffff';
                     ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
                     if (obj.isDouble) { 
                         ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); 
@@ -597,10 +636,27 @@
                     }
                 } else if (obj.type === 'text') {
                     ctx.fillStyle = obj.color;
-                    ctx.font = `${obj.fontSize}px sans-serif`;
+                    let fontStyle = obj.isItalic ? 'italic ' : '';
+                    let fontWeight = obj.isBold ? 'bold ' : '';
+                    ctx.font = `${fontStyle}${fontWeight}${obj.fontSize}px sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(obj.text, obj.x, obj.y);
+                    
+                    let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text;
+                    ctx.fillText(drawText, obj.x, obj.y);
+
+                    if (obj.isUnderline) {
+                        let metrics = ctx.measureText(drawText);
+                        let textWidth = metrics.width;
+                        let yOffset = obj.fontSize * 0.4;
+                        
+                        ctx.beginPath();
+                        ctx.strokeStyle = obj.color;
+                        ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
+                        ctx.moveTo(obj.x - textWidth / 2, obj.y + yOffset);
+                        ctx.lineTo(obj.x + textWidth / 2, obj.y + yOffset);
+                        ctx.stroke();
+                    }
                 }
             });
 
@@ -637,7 +693,11 @@
                         x: tx, 
                         y: ty, 
                         color: activeTextInput.style.color, 
-                        fontSize: parseInt(activeTextInput.getAttribute('data-size')) 
+                        fontSize: parseInt(activeTextInput.getAttribute('data-size')),
+                        isBold: isTextBold,
+                        isItalic: isTextItalic,
+                        isUnderline: isTextUnderline,
+                        isAllCaps: isTextAllCaps
                     });
                     resetUndoCounter();
                     renderScene();
@@ -648,41 +708,40 @@
             }
         }
 
-        // ฟังก์ชันสำหรับสร้างลายน้ำแบบแก้ไข/ลากได้
         function createWatermark() {
             if (activeTextInput) finalizeTextInput();
             
             const currentYear = new Date().getFullYear();
             const watermarkText = `©️ ${currentYear} Monte Kietpawpan`;
             
-            // ตำแหน่งกึ่งกลางหน้าจอ
             const clientX = window.innerWidth / 2;
             const clientY = window.innerHeight / 2;
             const wPos = getWorldPos(clientX, clientY);
 
-            // จำลองการใช้เครื่องมือ Text ด้วยขนาดเริ่มต้นที่เหมาะสม
             const previousTool = currentTool;
             setTool('text');
-            // ปรับขนาด font สำหรับลายน้ำ (สมมติว่าเอาเล็กลงหน่อย)
             const watermarkSize = 16;
             
             activeTextInput = document.createElement('input');
             activeTextInput.type = 'text';
-            activeTextInput.value = watermarkText; // ใส่ข้อความลายน้ำเป็นค่าเริ่มต้น
+            activeTextInput.value = watermarkText; 
             activeTextInput.className = 'movable-text-input';
             
             activeTextInput.style.left = clientX + 'px';
             activeTextInput.style.top = clientY + 'px';
             activeTextInput.style.fontSize = (watermarkSize * camera.scale) + 'px';
-            // ใช้สีปัจจุบัน หรือสามารถ fixed เป็นสีเทาได้ เช่น activeTextInput.style.color = '#7f8c8d';
             activeTextInput.style.color = currentColor; 
+            
+            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal';
+            activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
+            activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
+            activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
             
             activeTextInput.setAttribute('data-x', wPos.x);
             activeTextInput.setAttribute('data-y', wPos.y);
             activeTextInput.setAttribute('data-size', watermarkSize);
 
             container.appendChild(activeTextInput);
-            // โฟกัสเพื่อให้พร้อมลาก
             setTimeout(() => activeTextInput.focus(), 50);
 
             activeTextInput.addEventListener('pointerdown', (e) => {
@@ -695,7 +754,6 @@
 
             activeTextInput.addEventListener('blur', () => {
                 finalizeTextInput();
-                // คืนค่าเครื่องมือกลับเป็นของเดิมก่อนกดลายน้ำ
                 setTool(previousTool);
             });
             activeTextInput.addEventListener('keydown', (ev) => {
@@ -713,6 +771,11 @@
             activeTextInput.style.top = clientY + 'px';
             activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
             activeTextInput.style.color = currentColor;
+            
+            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal';
+            activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
+            activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
+            activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
             
             activeTextInput.setAttribute('data-x', wx);
             activeTextInput.setAttribute('data-y', wy);
@@ -806,6 +869,7 @@
                         type: 'arrow',
                         pathType: currentTool,
                         color: currentColor,
+                        lineWidth: currentBaseSize, 
                         points: [arrowStartPoint]
                     };
                 }
@@ -816,15 +880,15 @@
                 guideTimeout = setTimeout(() => { activeGuides = []; renderScene(); }, 1000);
 
                 if (currentTool === 'rect') {
-                    sceneObjects.push({ type: 'rect', color: currentColor, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
+                    sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
                 } else if (currentTool === 'cloud') {
-                    sceneObjects.push({ type: 'cloud', color: currentColor, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
+                    sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
                 } else if (currentTool === 'valve-h') {
-                    sceneObjects.push({ type: 'valve-h', color: currentColor, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
+                    sceneObjects.push({ type: 'valve-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
                 } else if (currentTool === 'valve-v') {
-                    sceneObjects.push({ type: 'valve-v', color: currentColor, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
+                    sceneObjects.push({ type: 'valve-v', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
                 } else if (currentTool === 'circle') {
-                    sceneObjects.push({ type: 'circle', color: currentColor, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle }); 
+                    sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle }); 
                 }
                 resetUndoCounter();
                 renderScene();
@@ -938,6 +1002,7 @@
                     }
                     sceneObjects.push({ 
                         type: 'arrow', pathType: currentTool, color: currentColor, 
+                        lineWidth: currentBaseSize, 
                         p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor 
                     });
                     resetUndoCounter();
