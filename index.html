@@ -15,7 +15,7 @@
         .tool-group { display: flex; align-items: center; gap: 5px; border-right: 1px solid #ccc; padding-right: 8px; margin-right: 2px; }
         .tool-group:last-child { border-right: none; margin-right: 0; padding-right: 0; }
         
-        button { padding: 6px 12px; border: none; border-radius: 15px; background: #e0e0e0; font-size: 14px; cursor: pointer; transition: 0.1s; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+        button { width: 38px; height: 38px; padding: 0; border: none; border-radius: 50%; background: #e0e0e0; font-size: 18px; cursor: pointer; transition: 0.1s; display: flex; align-items: center; justify-content: center; }
         button.active { background: #007aff; color: white; }
         button.danger { background: #ff3b30; color: white; }
         button.action-btn { background: #ff9500; color: white; }
@@ -23,20 +23,19 @@
         .color-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
         .color-btn.active { border-color: #333; transform: scale(1.1); }
         
-        .size-check { display: flex; align-items: center; gap: 3px; cursor: pointer; background: #f5f5f5; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+        .size-check { display: flex; align-items: center; gap: 3px; cursor: pointer; background: #f5f5f5; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .size-check:hover { background: #e0e0e0; }
         .size-check input[type="radio"] { cursor: pointer; margin: 0; }
 
-        .shape-control-group { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+        .shape-control-group { display: flex; align-items: center; gap: 5px; font-size: 12px; }
         #curvature-control { display: none; } 
-        #curvature-slider { width: 100px; }
+        #curvature-slider { width: 80px; }
         #double-edge-control { display: none; } 
         #double-edge-check { cursor: pointer; }
         #text-size-control { display: none; }
         #text-size-input { width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 14px; outline: none; }
         #text-size-input:focus { border-color: #007aff; }
         
-        /* สไตล์สำหรับกล่องข้อความที่ลากได้ */
         .movable-text-input {
             position: absolute;
             transform: translate(-50%, -50%);
@@ -49,8 +48,8 @@
             font-family: sans-serif;
             text-align: center;
             min-width: 150px;
-            cursor: move; /* เปลี่ยน cursor ให้รู้ว่าลากได้ */
-            touch-action: none; /* ป้องกัน browser handling */
+            cursor: move;
+            touch-action: none;
         }
     </style>
 </head>
@@ -62,61 +61,64 @@
 
     <div id="toolbar">
         <div class="tool-group">
-            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')">✍️ เส้น</button>
+            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ">✍️</button>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-text" class="tool-btn" onclick="setTool('text')">🔤 พิมพ์</button>
+                <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ">🔤</button>
                 <div id="text-size-control" class="shape-control-group">
-                    <label style="cursor: default;">ขนาด:</label>
-                    <input type="number" id="text-size-input" min="10" max="150" value="24" oninput="setTextSize(this.value)"> px
+                    <label style="cursor: default; font-size: 16px;" title="ขนาดตัวอักษร">📏</label>
+                    <input type="number" id="text-size-input" min="10" max="150" value="24" oninput="setTextSize(this.value)">
                 </div>
             </div>
-            <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')">🧹 ลบ</button>
+            <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')" title="ยางลบ">🧹</button>
         </div>
+        
         <div class="tool-group">
-            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')">🟩 กล่อง</button>
-            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')">☁️ เมฆ</button>
-            <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')">⏳ วาล์วนอน</button>
-            <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')">⌛ วาล์วตั้ง</button>
+            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม">🟩</button>
+            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ">☁️</button>
+            <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⏳</button>
+            <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">⌛</button>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')">⭕ วงกลม</button>
+                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม">⭕</button>
                 <div id="double-edge-control" class="shape-control-group">
-                    <label style="cursor: pointer; display: flex; align-items: center; gap: 3px;">
-                        <input type="checkbox" id="double-edge-check" onchange="toggleDoubleEdge()"> ขอบคู่
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 3px;" title="เปิดใช้งานวงกลมขอบคู่">
+                        <input type="checkbox" id="double-edge-check" onchange="toggleDoubleEdge()"> ◎
                     </label>
                 </div>
             </div>
         </div>
+        
         <div class="tool-group">
-            <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')">⤴ ทึบ</button>
-            <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')">⤴ ประ</button>
+            <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม">⤴️</button>
+            <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⤵️</button>
+            <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)">🔀</button>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')">弧 ประโค้ง</button>
+                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">弧</button>
                 <div id="curvature-control" class="shape-control-group">
-                    <label style="cursor: default;">โค้ง:</label>
+                    <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
                     <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
                 </div>
             </div>
         </div>
         
         <div class="tool-group size-picker">
-            <label class="size-check"><input type="radio" name="penSize" value="2" onchange="setSize(2)"> เล็ก</label>
-            <label class="size-check"><input type="radio" name="penSize" value="4" checked onchange="setSize(4)"> กลาง</label>
-            <label class="size-check"><input type="radio" name="penSize" value="12" onchange="setSize(12)"> ใหญ่</label>
+            <label class="size-check" title="ขนาดเล็ก"><input type="radio" name="penSize" value="2" onchange="setSize(2)"> S</label>
+            <label class="size-check" title="ขนาดกลาง"><input type="radio" name="penSize" value="4" checked onchange="setSize(4)"> M</label>
+            <label class="size-check" title="ขนาดใหญ่"><input type="radio" name="penSize" value="12" onchange="setSize(12)"> L</label>
         </div>
 
         <div class="tool-group color-picker">
-            <button class="color-btn active" style="background-color: #000000;" onclick="setColor('#000000', this)"></button>
-            <button class="color-btn" style="background-color: #FF3B30;" onclick="setColor('#FF3B30', this)"></button>
-            <button class="color-btn" style="background-color: #34C759;" onclick="setColor('#34C759', this)"></button>
-            <button class="color-btn" style="background-color: #007AFF;" onclick="setColor('#007AFF', this)"></button>
+            <button class="color-btn active" style="background-color: #000000;" onclick="setColor('#000000', this)" title="สีดำ"></button>
+            <button class="color-btn" style="background-color: #FF3B30;" onclick="setColor('#FF3B30', this)" title="สีแดง"></button>
+            <button class="color-btn" style="background-color: #34C759;" onclick="setColor('#34C759', this)" title="สีเขียว"></button>
+            <button class="color-btn" style="background-color: #007AFF;" onclick="setColor('#007AFF', this)" title="สีน้ำเงิน"></button>
         </div>
 
         <div class="tool-group">
-            <button class="action-btn" onclick="resetView()" style="margin-right: 5px;">🔍 คืนมุมมอง</button>
-            <button class="action-btn" onclick="undo()" style="margin-right: 5px;">↩️ ย้อน</button>
-            <button class="action-btn" onclick="saveImage()" style="margin-right: 5px;">💾 บันทึก</button>
-            <button class="action-btn" onclick="shareImage()" style="margin-right: 5px;">📲 แชร์</button>
-            <button class="danger" onclick="clearBoard()">🗑️ ล้าง</button>
+            <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
+            <button class="action-btn" onclick="undo()" title="ย้อนกลับการทำงานล่าสุด">↩️</button>
+            <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ">💾</button>
+            <button class="action-btn" onclick="shareImage()" title="แชร์รูปภาพ">📲</button>
+            <button class="danger" onclick="clearBoard()" title="ลบภาพทั้งหมดบนกระดาน">🗑️</button>
         </div>
     </div>
 
@@ -207,7 +209,7 @@
 
             currentTool = tool;
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c')}`;
+            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c').replace(/line/g, 'l')}`;
             const btn = document.getElementById(btnId);
             if(btn) btn.classList.add('active');
 
@@ -240,38 +242,25 @@
         
         function clearBoard() { sceneObjects = []; resetView(); }
 
-        // --- เพิ่มฟังก์ชันจัดการ Undo Limit (2 ชั้น) ---
         function pushToScene(newObj) {
             sceneObjects.push(newObj);
-            // จำกัดจำนวน object หรือกลุ่ม object ไว้ที่นี่หากต้องการ undo แบบ snapshot
-            // แต่เนื่องจากโค้ดเดิมใช้ sceneObjects แบบ list ของ action 
-            // การจำกัด undo 2 ชั้น หมายถึงให้ถอยหลังได้ 2 action
-            // ในที่นี้จะเก็บประวัติ 2 ลำดับสุดท้าย? 
-            // "อยากให้ปุ่ม undo ได้ไม่เกิน 2 ชั้นความลึกย้อนหลัง"
-            // ปกติ sceneObjects ยาวเท่าไหร่ก็ได้ แต่เราจะให้ undo ถอนได้แค่ 2 ครั้ง
-            // หรือหมายถึงเก็บ state ทั้งหมดแค่ 2 state? 
-            // เอาเป็นว่า sceneObjects เป็นตัววาด ถอน push ไปก็คือ undo
         }
 
-        // สถานะนับการ undo ว่าทำไปกี่ครั้งแล้ว
         let undoCount = 0;
-        let undoLimit = 2; // จำนวนชั้นที่อนุญาตให้ undo ได้
+        let undoLimit = 2;
 
         function undo() {
             if (activeTextInput) finalizeTextInput();
             
-            // เช็คว่าถอนไปแล้วกี่ครั้ง
             if (sceneObjects.length > 0 && undoCount < undoLimit) {
                 sceneObjects.pop(); 
-                undoCount++; // เพิ่มจำนวนการถอน
+                undoCount++; 
                 renderScene();      
             } else if (undoCount >= undoLimit) {
                 console.log("ถึงขีดจำกัดการ Undo (2 ครั้ง)");
-                // แจ้งผู้ใช้เบาๆ (ถ้าต้องการ)
             }
         }
 
-        // เมื่อมีการวาดหรือสร้างอะไรใหม่ ให้รีเซ็ตการนับการ undo
         function resetUndoCounter() {
             undoCount = 0;
         }
@@ -455,8 +444,6 @@
             return cleanResult;
         }
 
-        // --- ระบบวาดเส้นและรูปทรง ---
-
         function drawSmoothPath(c, pathData) {
             if (!pathData.points || pathData.points.length === 0) return;
             c.beginPath();
@@ -511,7 +498,6 @@
             c.strokeStyle = obj.color; c.lineWidth = 4; c.stroke();
         }
 
-        function getArrowAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
         function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
 
         function drawCurvedArrow(c, obj, isPreview = false) {
@@ -557,7 +543,7 @@
             setLineDash(c, false);
             c.lineJoin = 'miter';
 
-            if (!isPreview) {
+            if (!isPreview && !obj.pathType.includes('line')) {
                 let endPt = obj.points[obj.points.length - 1];
                 let prevPt = obj.points[obj.points.length - 2];
                 const angle = Math.atan2(endPt.y - prevPt.y, endPt.x - prevPt.x);
@@ -575,7 +561,6 @@
             }
 
             const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor }; 
-            // ลบ drawStraightArrow ออก
             if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
         }
 
@@ -606,7 +591,6 @@
                     if (obj.points) {
                         drawFreehandArrow(ctx, obj, false);
                     } else if (obj.p1 && obj.p2) {
-                        // ลบ straight arrow ออก
                         if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
                     }
                 } else if (obj.type === 'text') {
@@ -653,7 +637,7 @@
                         color: activeTextInput.style.color, 
                         fontSize: parseInt(activeTextInput.getAttribute('data-size')) 
                     });
-                    resetUndoCounter(); // มีการสร้างใหม่ รีเซ็ต undo
+                    resetUndoCounter();
                     renderScene();
                 }
                 activeTextInput.remove();
@@ -662,14 +646,12 @@
             }
         }
 
-        // ฟังก์ชันสร้างกล่องข้อความ
         function createTextInput(wx, wy, clientX, clientY) {
             activeTextInput = document.createElement('input');
             activeTextInput.type = 'text';
             activeTextInput.placeholder = 'พิมพ์...';
             activeTextInput.className = 'movable-text-input';
             
-            // ตำแหน่งบนจอ
             activeTextInput.style.left = clientX + 'px';
             activeTextInput.style.top = clientY + 'px';
             activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
@@ -682,39 +664,30 @@
             container.appendChild(activeTextInput);
             setTimeout(() => activeTextInput.focus(), 50);
 
-            // อีเวนต์ลากขยับกล่อง
             activeTextInput.addEventListener('pointerdown', (e) => {
                 isDraggingText = true;
-                // คำนวณจุดที่จิ้มเทียบกับตำแหน่งของกล่อง (เพื่อไม่ให้กล่องกระตุกไปที่ตรงกลาง)
                 const rect = activeTextInput.getBoundingClientRect();
                 textDragOffset.x = e.clientX - (rect.left + rect.width / 2);
                 textDragOffset.y = e.clientY - (rect.top + rect.height / 2);
-                
-                // ไม่ให้ไป trigger การวาดที่ canvas
                 e.stopPropagation();
             });
 
-            // เมื่อพิมพ์เสร็จ
             activeTextInput.addEventListener('blur', finalizeTextInput);
             activeTextInput.addEventListener('keydown', (ev) => {
                 if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
             });
         }
 
-        // --- ระบบรับข้อมูล Pointer Events ---
         container.addEventListener('pointermove', (e) => {
-            // จัดการลากข้อความในระดับ container
             if (isDraggingText && activeTextInput) {
                 e.preventDefault();
                 
-                // คำนวณตำแหน่งใหม่บนจอ
                 const newClientX = e.clientX - textDragOffset.x;
                 const newClientY = e.clientY - textDragOffset.y;
                 
                 activeTextInput.style.left = newClientX + 'px';
                 activeTextInput.style.top = newClientY + 'px';
                 
-                // อัปเดตพิกัด world
                 const wPos = getWorldPos(newClientX, newClientY);
                 activeTextInput.setAttribute('data-x', wPos.x);
                 activeTextInput.setAttribute('data-y', wPos.y);
@@ -724,7 +697,6 @@
         container.addEventListener('pointerup', (e) => {
             if (isDraggingText) {
                 isDraggingText = false;
-                // หลังจากลากเสร็จ ให้ focus คืน
                 if (activeTextInput) activeTextInput.focus();
             }
         });
@@ -769,10 +741,10 @@
                     sceneObjects.push(currentPath);
                     resetUndoCounter();
                 }
-            } else if (currentTool.includes('arrow')) {
+            } else if (currentTool.includes('arrow') || currentTool.includes('line')) {
                 isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
                 
-                if (currentTool.includes('angled-arrow')) {
+                if (currentTool.includes('angled')) {
                     currentPath = {
                         type: 'arrow',
                         pathType: currentTool,
@@ -803,7 +775,6 @@
         });
 
         canvas.addEventListener('pointermove', (e) => {
-            // ถ้าย้ายกล่องข้อความอยู่ ให้ container จัดการ
             if (isDraggingText) return;
 
             e.preventDefault();
@@ -853,7 +824,7 @@
                 }
 
             } else if (isDraggingArrow) {
-                if (currentTool.includes('angled-arrow') && currentPath) {
+                if (currentTool.includes('angled') && currentPath) {
                     currentPath.points.push(worldPos);
                     
                     pCtx.setTransform(1, 0, 0, 1, 0, 0); 
@@ -869,7 +840,6 @@
         });
 
         function handlePointerEnd(e) {
-            // จัดการกรณี touch ที่แคนวาส
             if (e.pointerType === 'touch') {
                 activeTouchPointers.delete(e.pointerId);
                 if (activeTouchPointers.size < 2) {
@@ -898,7 +868,7 @@
             } else if (isDraggingArrow) {
                 const worldPos = getWorldPos(e.clientX, e.clientY);
 
-                if (currentTool.includes('angled-arrow') && currentPath) {
+                if (currentTool.includes('angled') && currentPath) {
                     currentPath.points = orthogonalize(currentPath.points, 25);
                     if (currentPath.points.length > 1) {
                         sceneObjects.push(currentPath);
