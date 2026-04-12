@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iPad System Dynamics - Pro Pan/Zoom & Pencil Only</title>
+    <title>iPad System Dynamics - Text Move & Limited Undo</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; }
         #board-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
@@ -35,6 +35,23 @@
         #text-size-control { display: none; }
         #text-size-input { width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 14px; outline: none; }
         #text-size-input:focus { border-color: #007aff; }
+        
+        /* สไตล์สำหรับกล่องข้อความที่ลากได้ */
+        .movable-text-input {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px dashed #007aff;
+            border-radius: 8px;
+            outline: none;
+            padding: 4px 10px;
+            z-index: 100;
+            font-family: sans-serif;
+            text-align: center;
+            min-width: 150px;
+            cursor: move; /* เปลี่ยน cursor ให้รู้ว่าลากได้ */
+            touch-action: none; /* ป้องกัน browser handling */
+        }
     </style>
 </head>
 <body>
@@ -70,8 +87,6 @@
             </div>
         </div>
         <div class="tool-group">
-            <button id="btn-s-arrow-s" class="tool-btn" onclick="setTool('straight-arrow-solid')">↑ ทึบ</button>
-            <button id="btn-s-arrow-d" class="tool-btn" onclick="setTool('straight-arrow-dashed')">↑ ประ</button>
             <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')">⤴ ทึบ</button>
             <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')">⤴ ประ</button>
             <div style="display: flex; align-items: center; gap: 5px;">
@@ -92,6 +107,7 @@
         <div class="tool-group color-picker">
             <button class="color-btn active" style="background-color: #000000;" onclick="setColor('#000000', this)"></button>
             <button class="color-btn" style="background-color: #FF3B30;" onclick="setColor('#FF3B30', this)"></button>
+            <button class="color-btn" style="background-color: #34C759;" onclick="setColor('#34C759', this)"></button>
             <button class="color-btn" style="background-color: #007AFF;" onclick="setColor('#007AFF', this)"></button>
         </div>
 
@@ -131,8 +147,11 @@
         let arrowStartPoint = null; 
         let sceneObjects = []; 
         let currentPath = null;
-        let lastPoint = null;
         let activeTextInput = null; 
+
+        // --- สถานะการลากข้อความ ---
+        let isDraggingText = false;
+        let textDragOffset = { x: 0, y: 0 };
 
         // --- ระบบกล้อง (Pan & Zoom) ---
         let camera = { x: 0, y: 0, scale: 1 };
@@ -144,7 +163,11 @@
         let initialScale = 1;
         let pinchCenter = { x: 0, y: 0 };
 
-        const SHAPE = { RECT_W: 160, RECT_H: 80, CLOUD_W: 140, CLOUD_H: 90, VALVE_W: 60, VALVE_H: 40 };
+        // --- ระบบ Alignment Guides ---
+        let activeGuides = [];
+        let guideTimeout = null;
+
+        const SHAPE = { RECT_W: 160, RECT_H: 80, CLOUD_W: 70, CLOUD_H: 45, VALVE_W: 60, VALVE_H: 40 };
 
         function applyCamera(context) {
             const dpr = window.devicePixelRatio || 1;
@@ -207,18 +230,50 @@
             const parsedValue = parseInt(value);
             if (!isNaN(parsedValue) && parsedValue > 0) {
                 currentTextSize = parsedValue; 
-                if(activeTextInput) activeTextInput.style.fontSize = (parsedValue * camera.scale) + 'px'; // ปรับสเกลขณะพิมพ์
+                if(activeTextInput) {
+                    activeTextInput.style.fontSize = (parsedValue * camera.scale) + 'px';
+                    activeTextInput.setAttribute('data-size', parsedValue);
+                }
             }
         }
         function toggleDoubleEdge() { isDoubleCircle = doubleEdgeCheck.checked; } 
         
         function clearBoard() { sceneObjects = []; resetView(); }
+
+        // --- เพิ่มฟังก์ชันจัดการ Undo Limit (2 ชั้น) ---
+        function pushToScene(newObj) {
+            sceneObjects.push(newObj);
+            // จำกัดจำนวน object หรือกลุ่ม object ไว้ที่นี่หากต้องการ undo แบบ snapshot
+            // แต่เนื่องจากโค้ดเดิมใช้ sceneObjects แบบ list ของ action 
+            // การจำกัด undo 2 ชั้น หมายถึงให้ถอยหลังได้ 2 action
+            // ในที่นี้จะเก็บประวัติ 2 ลำดับสุดท้าย? 
+            // "อยากให้ปุ่ม undo ได้ไม่เกิน 2 ชั้นความลึกย้อนหลัง"
+            // ปกติ sceneObjects ยาวเท่าไหร่ก็ได้ แต่เราจะให้ undo ถอนได้แค่ 2 ครั้ง
+            // หรือหมายถึงเก็บ state ทั้งหมดแค่ 2 state? 
+            // เอาเป็นว่า sceneObjects เป็นตัววาด ถอน push ไปก็คือ undo
+        }
+
+        // สถานะนับการ undo ว่าทำไปกี่ครั้งแล้ว
+        let undoCount = 0;
+        let undoLimit = 2; // จำนวนชั้นที่อนุญาตให้ undo ได้
+
         function undo() {
             if (activeTextInput) finalizeTextInput();
-            if (sceneObjects.length > 0) {
+            
+            // เช็คว่าถอนไปแล้วกี่ครั้ง
+            if (sceneObjects.length > 0 && undoCount < undoLimit) {
                 sceneObjects.pop(); 
+                undoCount++; // เพิ่มจำนวนการถอน
                 renderScene();      
+            } else if (undoCount >= undoLimit) {
+                console.log("ถึงขีดจำกัดการ Undo (2 ครั้ง)");
+                // แจ้งผู้ใช้เบาๆ (ถ้าต้องการ)
             }
+        }
+
+        // เมื่อมีการวาดหรือสร้างอะไรใหม่ ให้รีเซ็ตการนับการ undo
+        function resetUndoCounter() {
+            undoCount = 0;
         }
 
         function getCanvasWithWhiteBackground() {
@@ -250,31 +305,46 @@
             }, 'image/png');
         }
 
-        // --- คำนวณตรรกะพิกัดและการดูดติดขอบ ---
-        function getAlignedY(newY, threshold = 60) {
-            for (let obj of sceneObjects) {
-                if (obj.type === 'rect' || obj.type === 'cloud' || obj.type === 'valve-h') {
-                    if (Math.abs(obj.y - newY) < threshold) {
-                        return obj.y; 
-                    }
-                }
-            }
-            return newY;
-        }
-
         function getShapeBox(obj) {
             let box = null;
             if (obj.type === 'rect') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
             else if (obj.type === 'cloud') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
-            else if (obj.type === 'valve-h' || obj.type === 'valve-v') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            else if (obj.type === 'valve-h') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            else if (obj.type === 'valve-v') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
             else if (obj.type === 'circle') box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
             
             if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v');
             return box;
         }
 
+        function getAlignedCenter(cx, cy) {
+            let snappedCx = cx;
+            let snappedCy = cy;
+            let foundV = false;
+            let foundH = false;
+            const threshold = 20; 
+            let guides = [];
+
+            for (let obj of sceneObjects) {
+                let box = getShapeBox(obj);
+                if (!box) continue;
+
+                if (!foundV && Math.abs(cx - box.cx) < threshold) {
+                    snappedCx = box.cx;
+                    guides.push({ type: 'v', val: box.cx });
+                    foundV = true;
+                }
+                if (!foundH && Math.abs(cy - box.cy) < threshold) {
+                    snappedCy = box.cy;
+                    guides.push({ type: 'h', val: box.cy });
+                    foundH = true;
+                }
+            }
+            return { x: snappedCx, y: snappedCy, guides: guides };
+        }
+
         function isPointInOrNearBox(px, py, box) {
-            const pad = 30; // พิกัดในโลกจำลอง ไม่ได้รับผลกระทบจากซูม
+            const pad = 30; 
             return px >= box.left - pad && px <= box.right + pad && py >= box.top - pad && py <= box.bottom + pad;
         }
 
@@ -315,7 +385,104 @@
             return { p1, p2 };
         }
 
-        // --- ระบบวาดรูปทรง ---
+        function orthogonalize(points, threshold = 30) {
+            if (!points || points.length < 2) return points;
+            
+            let result = [{ x: points[0].x, y: points[0].y }];
+            let current = { x: points[0].x, y: points[0].y };
+            let movingAxis = null; 
+
+            for (let i = 1; i < points.length; i++) {
+                let pt = points[i];
+                let dx = pt.x - current.x;
+                let dy = pt.y - current.y;
+
+                if (!movingAxis) {
+                    if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) > threshold) {
+                        movingAxis = 'x';
+                        current.x = pt.x;
+                        result.push({ x: current.x, y: current.y });
+                    } else if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > threshold) {
+                        movingAxis = 'y';
+                        current.y = pt.y;
+                        result.push({ x: current.x, y: current.y });
+                    }
+                } else {
+                    if (movingAxis === 'x') {
+                        current.x = pt.x; 
+                        result[result.length - 1] = { x: current.x, y: current.y };
+                        
+                        if (Math.abs(pt.y - current.y) > threshold) {
+                            movingAxis = 'y';
+                            current.y = pt.y;
+                            result.push({ x: current.x, y: current.y });
+                        }
+                    } else {
+                        current.y = pt.y; 
+                        result[result.length - 1] = { x: current.x, y: current.y };
+                        
+                        if (Math.abs(pt.x - current.x) > threshold) {
+                            movingAxis = 'x';
+                            current.x = pt.x;
+                            result.push({ x: current.x, y: current.y });
+                        }
+                    }
+                }
+            }
+            
+            if (result.length > 1) {
+                let lastRaw = points[points.length - 1];
+                if (movingAxis === 'x') {
+                    result[result.length - 1] = { x: lastRaw.x, y: current.y };
+                } else if (movingAxis === 'y') {
+                    result[result.length - 1] = { x: current.x, y: lastRaw.y };
+                }
+            }
+            
+            let cleanResult = [result[0]];
+            for (let i = 1; i < result.length; i++) {
+                let prev = cleanResult[cleanResult.length - 1];
+                let curr = result[i];
+                if (Math.abs(curr.x - prev.x) > 1 || Math.abs(curr.y - prev.y) > 1) {
+                    cleanResult.push(curr);
+                }
+            }
+
+            if (cleanResult.length === 1) {
+                cleanResult.push({ x: points[points.length-1].x, y: points[points.length-1].y });
+            }
+            
+            return cleanResult;
+        }
+
+        // --- ระบบวาดเส้นและรูปทรง ---
+
+        function drawSmoothPath(c, pathData) {
+            if (!pathData.points || pathData.points.length === 0) return;
+            c.beginPath();
+            c.lineCap = 'round';
+            c.lineJoin = 'round';
+            c.globalCompositeOperation = pathData.type === 'eraser' ? 'destination-out' : 'source-over';
+            c.strokeStyle = pathData.type === 'eraser' ? 'rgba(0,0,0,1)' : (pathData.color || '#000');
+            c.lineWidth = pathData.type === 'eraser' ? pathData.baseSize * 2.5 : pathData.baseSize;
+
+            c.moveTo(pathData.points[0].x, pathData.points[0].y);
+            
+            if (pathData.points.length === 1) {
+                c.lineTo(pathData.points[0].x + 0.1, pathData.points[0].y);
+            } else {
+                for (let i = 1; i < pathData.points.length - 1; i++) {
+                    let midX = (pathData.points[i].x + pathData.points[i+1].x) / 2;
+                    let midY = (pathData.points[i].y + pathData.points[i+1].y) / 2;
+                    c.quadraticCurveTo(pathData.points[i].x, pathData.points[i].y, midX, midY);
+                }
+                let last = pathData.points[pathData.points.length - 1];
+                c.lineTo(last.x, last.y);
+            }
+            c.stroke();
+            c.globalCompositeOperation = 'source-over';
+        }
+
         function drawArrowhead(c, x, y, angle, color) {
             const size = 14; 
             c.save(); c.translate(x, y); c.rotate(angle);
@@ -347,19 +514,6 @@
         function getArrowAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
         function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
 
-        function drawStraightArrow(c, obj, isPreview = false) {
-            c.beginPath(); c.moveTo(obj.p1.x, obj.p1.y); c.lineTo(obj.p2.x, obj.p2.y);
-            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false); 
-            if(!isPreview) drawArrowhead(c, obj.p2.x, obj.p2.y, getArrowAngle(obj.p1, obj.p2), obj.color);
-        }
-
-        function drawAngledArrow(c, obj, isPreview = false) {
-            const handle = { x: obj.p1.x, y: obj.p2.y }; 
-            c.beginPath(); c.moveTo(obj.p1.x, obj.p1.y); c.lineTo(handle.x, handle.y); c.lineTo(obj.p2.x, obj.p2.y);
-            c.strokeStyle = obj.color; c.lineWidth = 4; setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
-            if(!isPreview) drawArrowhead(c, obj.p2.x, obj.p2.y, getArrowAngle(handle, obj.p2), obj.color);
-        }
-
         function drawCurvedArrow(c, obj, isPreview = false) {
             const p1 = obj.p1, p2 = obj.p2;
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
@@ -385,6 +539,32 @@
             if (!isPreview) drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color);
         }
 
+        function drawFreehandArrow(c, obj, isPreview = false) {
+            if (!obj.points || obj.points.length < 2) return;
+
+            c.beginPath();
+            c.moveTo(obj.points[0].x, obj.points[0].y);
+            for (let i = 1; i < obj.points.length; i++) {
+                c.lineTo(obj.points[i].x, obj.points[i].y);
+            }
+
+            c.strokeStyle = isPreview ? '#999' : obj.color;
+            c.lineWidth = 4;
+            c.lineJoin = 'round'; 
+            
+            setLineDash(c, obj.pathType.includes('dashed'));
+            c.stroke();
+            setLineDash(c, false);
+            c.lineJoin = 'miter';
+
+            if (!isPreview) {
+                let endPt = obj.points[obj.points.length - 1];
+                let prevPt = obj.points[obj.points.length - 2];
+                const angle = Math.atan2(endPt.y - prevPt.y, endPt.x - prevPt.x);
+                drawArrowhead(c, endPt.x, endPt.y, angle, obj.color);
+            }
+        }
+
         function drawPreviewArrow(p1, p2) {
             pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             applyCamera(pCtx);
@@ -395,18 +575,8 @@
             }
 
             const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor }; 
-            if (currentTool.includes('straight')) drawStraightArrow(pCtx, obj, true);
-            else if (currentTool.includes('angled')) drawAngledArrow(pCtx, obj, true);
-            else if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
-        }
-
-        function drawSegment(c, p1, p2, pathData) {
-            c.lineCap = 'round'; c.lineJoin = 'round';
-            c.globalCompositeOperation = pathData.type === 'eraser' ? 'destination-out' : 'source-over';
-            c.strokeStyle = pathData.type === 'eraser' ? 'rgba(0,0,0,1)' : (pathData.color || '#000');
-            c.lineWidth = pathData.type === 'eraser' ? pathData.baseSize * 2.5 : pathData.baseSize;
-            c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.stroke();
-            c.globalCompositeOperation = 'source-over';
+            // ลบ drawStraightArrow ออก
+            if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
         }
 
         function renderScene() {
@@ -414,13 +584,9 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             applyCamera(ctx);
             
-            pCtx.setTransform(1, 0, 0, 1, 0, 0);
-            pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-            applyCamera(pCtx);
-            
             sceneObjects.forEach(obj => {
                 if (obj.type === 'pen' || obj.type === 'eraser') {
-                    for (let i = 1; i < obj.points.length; i++) drawSegment(ctx, obj.points[i-1], obj.points[i], obj);
+                    drawSmoothPath(ctx, obj);
                 } else if (obj.type === 'rect') {
                     ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
                     ctx.fillStyle = '#ffffff'; ctx.fill();
@@ -437,9 +603,12 @@
                     }
                     ctx.stroke();
                 } else if (obj.type === 'arrow') {
-                    if (obj.pathType.includes('straight')) drawStraightArrow(ctx, obj);
-                    else if (obj.pathType.includes('angled')) drawAngledArrow(ctx, obj);
-                    else if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
+                    if (obj.points) {
+                        drawFreehandArrow(ctx, obj, false);
+                    } else if (obj.p1 && obj.p2) {
+                        // ลบ straight arrow ออก
+                        if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
+                    }
                 } else if (obj.type === 'text') {
                     ctx.fillStyle = obj.color;
                     ctx.font = `${obj.fontSize}px sans-serif`;
@@ -448,6 +617,26 @@
                     ctx.fillText(obj.text, obj.x, obj.y);
                 }
             });
+
+            if (activeGuides.length > 0) {
+                ctx.save();
+                ctx.strokeStyle = '#34C759'; 
+                ctx.lineWidth = 2 / camera.scale; 
+                ctx.setLineDash([10 / camera.scale, 10 / camera.scale]);
+                
+                activeGuides.forEach(g => {
+                    ctx.beginPath();
+                    if (g.type === 'v') {
+                        ctx.moveTo(g.val, -50000); 
+                        ctx.lineTo(g.val, 50000);
+                    } else {
+                        ctx.moveTo(-50000, g.val); 
+                        ctx.lineTo(50000, g.val);
+                    }
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
         }
 
         function finalizeTextInput() {
@@ -464,18 +653,85 @@
                         color: activeTextInput.style.color, 
                         fontSize: parseInt(activeTextInput.getAttribute('data-size')) 
                     });
+                    resetUndoCounter(); // มีการสร้างใหม่ รีเซ็ต undo
                     renderScene();
                 }
                 activeTextInput.remove();
                 activeTextInput = null;
+                isDraggingText = false;
             }
         }
 
-        // --- ระบบรับข้อมูล Pointer Events (แยกการทำงาน นิ้ว vs ปากกา) ---
+        // ฟังก์ชันสร้างกล่องข้อความ
+        function createTextInput(wx, wy, clientX, clientY) {
+            activeTextInput = document.createElement('input');
+            activeTextInput.type = 'text';
+            activeTextInput.placeholder = 'พิมพ์...';
+            activeTextInput.className = 'movable-text-input';
+            
+            // ตำแหน่งบนจอ
+            activeTextInput.style.left = clientX + 'px';
+            activeTextInput.style.top = clientY + 'px';
+            activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
+            activeTextInput.style.color = currentColor;
+            
+            activeTextInput.setAttribute('data-x', wx);
+            activeTextInput.setAttribute('data-y', wy);
+            activeTextInput.setAttribute('data-size', currentTextSize);
+
+            container.appendChild(activeTextInput);
+            setTimeout(() => activeTextInput.focus(), 50);
+
+            // อีเวนต์ลากขยับกล่อง
+            activeTextInput.addEventListener('pointerdown', (e) => {
+                isDraggingText = true;
+                // คำนวณจุดที่จิ้มเทียบกับตำแหน่งของกล่อง (เพื่อไม่ให้กล่องกระตุกไปที่ตรงกลาง)
+                const rect = activeTextInput.getBoundingClientRect();
+                textDragOffset.x = e.clientX - (rect.left + rect.width / 2);
+                textDragOffset.y = e.clientY - (rect.top + rect.height / 2);
+                
+                // ไม่ให้ไป trigger การวาดที่ canvas
+                e.stopPropagation();
+            });
+
+            // เมื่อพิมพ์เสร็จ
+            activeTextInput.addEventListener('blur', finalizeTextInput);
+            activeTextInput.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
+            });
+        }
+
+        // --- ระบบรับข้อมูล Pointer Events ---
+        container.addEventListener('pointermove', (e) => {
+            // จัดการลากข้อความในระดับ container
+            if (isDraggingText && activeTextInput) {
+                e.preventDefault();
+                
+                // คำนวณตำแหน่งใหม่บนจอ
+                const newClientX = e.clientX - textDragOffset.x;
+                const newClientY = e.clientY - textDragOffset.y;
+                
+                activeTextInput.style.left = newClientX + 'px';
+                activeTextInput.style.top = newClientY + 'px';
+                
+                // อัปเดตพิกัด world
+                const wPos = getWorldPos(newClientX, newClientY);
+                activeTextInput.setAttribute('data-x', wPos.x);
+                activeTextInput.setAttribute('data-y', wPos.y);
+            }
+        });
+
+        container.addEventListener('pointerup', (e) => {
+            if (isDraggingText) {
+                isDraggingText = false;
+                // หลังจากลากเสร็จ ให้ focus คืน
+                if (activeTextInput) activeTextInput.focus();
+            }
+        });
+
         canvas.addEventListener('pointerdown', (e) => {
-            // ระบบสัมผัสสำหรับเลื่อนและซูม (Touch = Pan/Zoom)
             if (e.pointerType === 'touch') {
-                if (activeTextInput) finalizeTextInput();
+                if (activeTextInput && !isDraggingText) finalizeTextInput();
                 activeTouchPointers.set(e.pointerId, e);
                 
                 if (activeTouchPointers.size === 1) {
@@ -490,85 +746,68 @@
                     pinchCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
                     startCam = { x: camera.x, y: camera.y };
                 }
-                return; // หยุดการทำงานถ้าเป็นนิ้ว
+                return; 
             }
 
-            // ระบบสำหรับวาด (Apple Pencil หรือ Mouse)
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
             const worldPos = getWorldPos(e.clientX, e.clientY);
             const wx = worldPos.x;
             const wy = worldPos.y;
             
-            if (activeTextInput) {
+            if (activeTextInput && !isDraggingText) {
                 finalizeTextInput();
                 if (currentTool !== 'text') return; 
             }
 
             if (currentTool === 'text') {
-                activeTextInput = document.createElement('input');
-                activeTextInput.type = 'text';
-                activeTextInput.placeholder = 'พิมพ์...';
-                
-                activeTextInput.style.position = 'absolute';
-                activeTextInput.style.left = e.clientX + 'px';
-                activeTextInput.style.top = e.clientY + 'px';
-                activeTextInput.style.transform = 'translate(-50%, -50%)';
-                activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
-                activeTextInput.style.color = currentColor;
-                activeTextInput.style.background = 'rgba(255, 255, 255, 0.9)';
-                activeTextInput.style.border = '2px dashed #007aff';
-                activeTextInput.style.borderRadius = '8px';
-                activeTextInput.style.outline = 'none';
-                activeTextInput.style.padding = '4px 10px';
-                activeTextInput.style.zIndex = '100';
-                activeTextInput.style.fontFamily = 'sans-serif';
-                activeTextInput.style.textAlign = 'center';
-                activeTextInput.style.minWidth = '150px';
-                
-                activeTextInput.setAttribute('data-x', wx);
-                activeTextInput.setAttribute('data-y', wy);
-                activeTextInput.setAttribute('data-size', currentTextSize);
-
-                container.appendChild(activeTextInput);
-                setTimeout(() => activeTextInput.focus(), 50);
-
-                activeTextInput.addEventListener('blur', finalizeTextInput);
-                activeTextInput.addEventListener('keydown', (ev) => {
-                    if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
-                });
-                
+                createTextInput(wx, wy, e.clientX, e.clientY);
             } else if (currentTool === 'pen' || currentTool === 'eraser') {
-                isDrawing = true; lastPoint = { x: wx, y: wy };
-                currentPath = { type: currentTool, color: currentColor, baseSize: currentBaseSize, points: [lastPoint] };
-                sceneObjects.push(currentPath);
+                isDrawing = true; 
+                currentPath = { type: currentTool, color: currentColor, baseSize: currentBaseSize, points: [{x: wx, y: wy}] };
+                if (currentTool === 'eraser') {
+                    sceneObjects.push(currentPath);
+                    resetUndoCounter();
+                }
             } else if (currentTool.includes('arrow')) {
                 isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
-            } else if (currentTool === 'rect') {
-                let targetY = getAlignedY(wy - SHAPE.RECT_H/2); 
-                sceneObjects.push({ type: 'rect', color: currentColor, x: wx - SHAPE.RECT_W/2, y: targetY, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
-                renderScene();
-            } else if (currentTool === 'cloud') {
-                let targetY = getAlignedY(wy - SHAPE.CLOUD_H/2);
-                sceneObjects.push({ type: 'cloud', color: currentColor, x: wx - SHAPE.CLOUD_W/2, y: targetY, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
-                renderScene();
-            } else if (currentTool === 'valve-h') {
-                let targetY = getAlignedY(wy - SHAPE.VALVE_H/2);
-                sceneObjects.push({ type: 'valve-h', color: currentColor, x: wx - SHAPE.VALVE_W/2, y: targetY, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
-                renderScene();
-            } else if (currentTool === 'valve-v') {
-                sceneObjects.push({ type: 'valve-v', color: currentColor, x: wx - SHAPE.VALVE_H/2, y: wy - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
-                renderScene();
-            } else if (currentTool === 'circle') {
-                sceneObjects.push({ type: 'circle', color: currentColor, x: wx, y: wy, radius: 50, isDouble: isDoubleCircle }); 
+                
+                if (currentTool.includes('angled-arrow')) {
+                    currentPath = {
+                        type: 'arrow',
+                        pathType: currentTool,
+                        color: currentColor,
+                        points: [arrowStartPoint]
+                    };
+                }
+            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle'].includes(currentTool)) {
+                let center = getAlignedCenter(wx, wy);
+                activeGuides = center.guides;
+                if (guideTimeout) clearTimeout(guideTimeout);
+                guideTimeout = setTimeout(() => { activeGuides = []; renderScene(); }, 1000);
+
+                if (currentTool === 'rect') {
+                    sceneObjects.push({ type: 'rect', color: currentColor, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
+                } else if (currentTool === 'cloud') {
+                    sceneObjects.push({ type: 'cloud', color: currentColor, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
+                } else if (currentTool === 'valve-h') {
+                    sceneObjects.push({ type: 'valve-h', color: currentColor, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
+                } else if (currentTool === 'valve-v') {
+                    sceneObjects.push({ type: 'valve-v', color: currentColor, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
+                } else if (currentTool === 'circle') {
+                    sceneObjects.push({ type: 'circle', color: currentColor, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle }); 
+                }
+                resetUndoCounter();
                 renderScene();
             }
         });
 
         canvas.addEventListener('pointermove', (e) => {
+            // ถ้าย้ายกล่องข้อความอยู่ ให้ container จัดการ
+            if (isDraggingText) return;
+
             e.preventDefault();
 
-            // ระบบสัมผัสเลื่อนและซูม
             if (e.pointerType === 'touch') {
                 if (!activeTouchPointers.has(e.pointerId)) return;
                 activeTouchPointers.set(e.pointerId, e);
@@ -585,7 +824,7 @@
                     let currentCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
                     
                     let scaleFactor = currentDist / initialPinchDist;
-                    camera.scale = Math.min(Math.max(initialScale * scaleFactor, 0.2), 5); // กำหนดระยะซูม
+                    camera.scale = Math.min(Math.max(initialScale * scaleFactor, 0.2), 5); 
                     
                     camera.x = currentCenter.x - ((pinchCenter.x - startCam.x) / initialScale) * camera.scale;
                     camera.y = currentCenter.y - ((pinchCenter.y - startCam.y) / initialScale) * camera.scale;
@@ -594,28 +833,43 @@
                 return;
             }
 
-            // ระบบวาดเขียน
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
             
             const worldPos = getWorldPos(e.clientX, e.clientY);
-            if (isDrawing && currentPath) {
-                const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+
+            if (isDrawing && currentPath && (currentTool === 'pen' || currentTool === 'eraser')) {
+                const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) ? e.getCoalescedEvents() : [e];
                 for (let ev of events) {
-                    const wPos = getWorldPos(ev.clientX, ev.clientY);
-                    currentPath.points.push(wPos);
-                    if (lastPoint) {
-                        ctx.setTransform(1,0,0,1,0,0);
-                        applyCamera(ctx);
-                        drawSegment(ctx, lastPoint, wPos, currentPath);
-                    }
-                    lastPoint = wPos;
+                    currentPath.points.push(getWorldPos(ev.clientX || e.clientX, ev.clientY || e.clientY));
                 }
+                
+                if (currentTool === 'pen') {
+                    pCtx.setTransform(1, 0, 0, 1, 0, 0); 
+                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
+                    applyCamera(pCtx);
+                    drawSmoothPath(pCtx, currentPath);
+                } else if (currentTool === 'eraser') {
+                    renderScene();
+                }
+
             } else if (isDraggingArrow) {
-                drawPreviewArrow(arrowStartPoint, worldPos);
+                if (currentTool.includes('angled-arrow') && currentPath) {
+                    currentPath.points.push(worldPos);
+                    
+                    pCtx.setTransform(1, 0, 0, 1, 0, 0); 
+                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
+                    applyCamera(pCtx);
+                    
+                    let previewObj = { ...currentPath, points: orthogonalize(currentPath.points, 25) };
+                    drawFreehandArrow(pCtx, previewObj, true); 
+                } else {
+                    drawPreviewArrow(arrowStartPoint, worldPos);
+                }
             }
         });
 
-        window.addEventListener('pointerup', (e) => {
+        function handlePointerEnd(e) {
+            // จัดการกรณี touch ที่แคนวาส
             if (e.pointerType === 'touch') {
                 activeTouchPointers.delete(e.pointerId);
                 if (activeTouchPointers.size < 2) {
@@ -633,27 +887,45 @@
 
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-            if (isDraggingArrow) {
-                const worldPos = getWorldPos(e.clientX, e.clientY);
-                let snapped = { p1: arrowStartPoint, p2: worldPos };
-                
-                if (currentTool !== 'curved-arrow-dashed') {
-                    snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
+            if (isDrawing && (currentTool === 'pen' || currentTool === 'eraser')) {
+                if (currentTool === 'pen' && currentPath) {
+                    sceneObjects.push(currentPath);
+                    resetUndoCounter();
                 }
+                pCtx.setTransform(1, 0, 0, 1, 0, 0); 
+                pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
+                renderScene();
+            } else if (isDraggingArrow) {
+                const worldPos = getWorldPos(e.clientX, e.clientY);
 
-                sceneObjects.push({ 
-                    type: 'arrow', pathType: currentTool, color: currentColor, 
-                    p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor 
-                });
+                if (currentTool.includes('angled-arrow') && currentPath) {
+                    currentPath.points = orthogonalize(currentPath.points, 25);
+                    if (currentPath.points.length > 1) {
+                        sceneObjects.push(currentPath);
+                        resetUndoCounter();
+                    }
+                } else {
+                    let snapped = { p1: arrowStartPoint, p2: worldPos };
+                    if (currentTool !== 'curved-arrow-dashed') {
+                        snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
+                    }
+                    sceneObjects.push({ 
+                        type: 'arrow', pathType: currentTool, color: currentColor, 
+                        p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor 
+                    });
+                    resetUndoCounter();
+                }
                 
                 pCtx.setTransform(1, 0, 0, 1, 0, 0); 
                 pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
                 renderScene();
             }
-            isDrawing = false; isDraggingArrow = false; currentPath = null; lastPoint = null; arrowStartPoint = null;
-        });
+            isDrawing = false; isDraggingArrow = false; currentPath = null; arrowStartPoint = null;
+        }
 
-        // ป้องกันบราวเซอร์เกิดอาการหน่วงจากการเลื่อนหน้าเว็บปกติ
+        window.addEventListener('pointerup', handlePointerEnd);
+        window.addEventListener('pointercancel', handlePointerEnd);
+
         [canvas, previewCanvas].forEach(c => {
             c.addEventListener('touchstart', e => { e.preventDefault(); }, { passive: false });
             c.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
