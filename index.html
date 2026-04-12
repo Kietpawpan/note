@@ -114,6 +114,7 @@
         </div>
 
         <div class="tool-group">
+            <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
             <button class="action-btn" onclick="undo()" title="ย้อนกลับการทำงานล่าสุด">↩️</button>
             <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ">💾</button>
@@ -644,6 +645,61 @@
                 activeTextInput = null;
                 isDraggingText = false;
             }
+        }
+
+        // ฟังก์ชันสำหรับสร้างลายน้ำแบบแก้ไข/ลากได้
+        function createWatermark() {
+            if (activeTextInput) finalizeTextInput();
+            
+            const currentYear = new Date().getFullYear();
+            const watermarkText = `©️ ${currentYear} Monte Kietpawpan`;
+            
+            // ตำแหน่งกึ่งกลางหน้าจอ
+            const clientX = window.innerWidth / 2;
+            const clientY = window.innerHeight / 2;
+            const wPos = getWorldPos(clientX, clientY);
+
+            // จำลองการใช้เครื่องมือ Text ด้วยขนาดเริ่มต้นที่เหมาะสม
+            const previousTool = currentTool;
+            setTool('text');
+            // ปรับขนาด font สำหรับลายน้ำ (สมมติว่าเอาเล็กลงหน่อย)
+            const watermarkSize = 16;
+            
+            activeTextInput = document.createElement('input');
+            activeTextInput.type = 'text';
+            activeTextInput.value = watermarkText; // ใส่ข้อความลายน้ำเป็นค่าเริ่มต้น
+            activeTextInput.className = 'movable-text-input';
+            
+            activeTextInput.style.left = clientX + 'px';
+            activeTextInput.style.top = clientY + 'px';
+            activeTextInput.style.fontSize = (watermarkSize * camera.scale) + 'px';
+            // ใช้สีปัจจุบัน หรือสามารถ fixed เป็นสีเทาได้ เช่น activeTextInput.style.color = '#7f8c8d';
+            activeTextInput.style.color = currentColor; 
+            
+            activeTextInput.setAttribute('data-x', wPos.x);
+            activeTextInput.setAttribute('data-y', wPos.y);
+            activeTextInput.setAttribute('data-size', watermarkSize);
+
+            container.appendChild(activeTextInput);
+            // โฟกัสเพื่อให้พร้อมลาก
+            setTimeout(() => activeTextInput.focus(), 50);
+
+            activeTextInput.addEventListener('pointerdown', (e) => {
+                isDraggingText = true;
+                const rect = activeTextInput.getBoundingClientRect();
+                textDragOffset.x = e.clientX - (rect.left + rect.width / 2);
+                textDragOffset.y = e.clientY - (rect.top + rect.height / 2);
+                e.stopPropagation();
+            });
+
+            activeTextInput.addEventListener('blur', () => {
+                finalizeTextInput();
+                // คืนค่าเครื่องมือกลับเป็นของเดิมก่อนกดลายน้ำ
+                setTool(previousTool);
+            });
+            activeTextInput.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
+            });
         }
 
         function createTextInput(wx, wy, clientX, clientY) {
