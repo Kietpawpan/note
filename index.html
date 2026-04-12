@@ -126,11 +126,17 @@
         <div class="tool-group">
             <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
-            <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ">💾</button>
+            
+            <button class="action-btn" onclick="document.getElementById('file-input').click()" title="เปิดโปรเจกต์ (.json)">📂</button>
+            <button class="action-btn" onclick="exportProject()" title="บันทึกโปรเจกต์ (.json)">💾</button>
+            
+            <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ (.png)">🖼️</button>
             <button class="action-btn" onclick="shareImage()" title="แชร์รูปภาพ">📲</button>
             <button class="danger" onclick="clearBoard()" title="ลบภาพทั้งหมดบนกระดาน">🗑️</button>
         </div>
     </div>
+    
+    <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importProject(event)">
 
     <script>
         const canvas = document.getElementById('board');
@@ -145,7 +151,6 @@
         const textFormatControl = document.getElementById('text-format-control');
         const textSizeInput = document.getElementById('text-size-input'); 
         
-        // --- สถานะของแอป ---
         let currentTool = 'pen';
         let currentColor = '#000000';
         let currentBaseSize = 4;
@@ -153,13 +158,11 @@
         let currentTextSize = 24;
         let isDoubleCircle = false; 
 
-        // --- สถานะรูปแบบอักษร ---
         let isTextBold = false;
         let isTextItalic = false;
         let isTextUnderline = false;
         let isTextAllCaps = false;
         
-        // --- สถานะการวาด ---
         let isDrawing = false;
         let isDraggingArrow = false; 
         let arrowStartPoint = null; 
@@ -167,11 +170,9 @@
         let currentPath = null;
         let activeTextInput = null; 
 
-        // --- สถานะการลากข้อความ ---
         let isDraggingText = false;
         let textDragOffset = { x: 0, y: 0 };
 
-        // --- ระบบกล้อง (Pan & Zoom) ---
         let camera = { x: 0, y: 0, scale: 1 };
         let activeTouchPointers = new Map();
         let isPanning = false;
@@ -181,7 +182,6 @@
         let initialScale = 1;
         let pinchCenter = { x: 0, y: 0 };
 
-        // --- ระบบ Alignment Guides ---
         let activeGuides = [];
         let guideTimeout = null;
 
@@ -308,10 +308,72 @@
             tCtx.drawImage(canvas, 0, 0);
             return tempCanvas;
         }
+        
+        function exportProject() {
+            if (activeTextInput) finalizeTextInput();
+
+            const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, '');
+            const defaultName = `sd-project-${dateStr}`;
+            
+            let fileName = prompt("ตั้งชื่อไฟล์โปรเจกต์ที่ต้องการบันทึก (ไม่ต้องพิมพ์ .json):", defaultName);
+            
+            if (fileName === null) return; 
+            if (fileName.trim() === "") fileName = defaultName;
+
+            const projectData = {
+                version: "1.0",
+                timestamp: new Date().toISOString(),
+                camera: camera,
+                objects: sceneObjects
+            };
+
+            const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${fileName}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importProject(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (activeTextInput) finalizeTextInput();
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.objects && data.camera) {
+                        sceneObjects = data.objects;
+                        camera = data.camera;
+                        resetUndoCounter();
+                        renderScene();
+                    } else {
+                        alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์สำหรับโปรเจกต์นี้');
+                    }
+                } catch (err) {
+                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
 
         function saveImage() {
+            if (activeTextInput) finalizeTextInput();
+            
+            const defaultName = 'sd-diagram';
+            
+            let fileName = prompt("ตั้งชื่อรูปภาพที่ต้องการบันทึก (ไม่ต้องพิมพ์ .png):", defaultName);
+            
+            if (fileName === null) return;
+            if (fileName.trim() === "") fileName = defaultName;
+
             const link = document.createElement('a');
-            link.download = 'sd-diagram.png';
+            link.download = `${fileName}.png`;
             link.href = getCanvasWithWhiteBackground().toDataURL('image/png');
             link.click();
         }
