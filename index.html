@@ -84,12 +84,15 @@
         </div>
         
         <div class="tool-group">
-            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม">🟩</button>
+            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม (Process)">🟩</button>
+            <button id="btn-oval" class="tool-btn" onclick="setTool('oval')" title="วงรี (Terminal)">⬭</button>
+            <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร (Decision)">💠</button>
+            <button id="btn-parallelogram" class="tool-btn" onclick="setTool('parallelogram')" title="สี่เหลี่ยมขนมเปียกปูน (Input/Output)">▱</button>
             <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ">☁️</button>
             <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⏳</button>
             <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">⌛</button>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม">⭕</button>
+                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม (Connector)">⭕</button>
                 <div id="double-edge-control" class="shape-control-group">
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 3px;" title="เปิดใช้งานวงกลมขอบคู่">
                         <input type="checkbox" id="double-edge-check" onchange="toggleDoubleEdge()"> ◎
@@ -114,9 +117,9 @@
         </div>
         
         <div class="tool-group size-picker">
-            <label class="size-check" title="ขนาดเล็ก"><input type="radio" name="penSize" value="2" onchange="setSize(2)"> S</label>
-            <label class="size-check" title="ขนาดกลาง"><input type="radio" name="penSize" value="4" checked onchange="setSize(4)"> M</label>
-            <label class="size-check" title="ขนาดใหญ่"><input type="radio" name="penSize" value="12" onchange="setSize(12)"> L</label>
+            <label class="size-check" title="ขนาดเล็ก"><input type="radio" name="penSize" value="2" checked onchange="setSize(2)"> S</label>
+            <label class="size-check" title="ขนาดกลาง"><input type="radio" name="penSize" value="4" onchange="setSize(4)"> M</label>
+            <label class="size-check" title="ขนาดใหญ่"><input type="radio" name="penSize" value="6" onchange="setSize(6)"> L</label>
         </div>
 
         <div class="tool-group color-picker">
@@ -143,9 +146,9 @@
 
     <script>
         const canvas = document.getElementById('board');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { desynchronized: true });
         const previewCanvas = document.getElementById('preview-canvas');
-        const pCtx = previewCanvas.getContext('2d');
+        const pCtx = previewCanvas.getContext('2d', { desynchronized: true });
         const container = document.getElementById('board-container');
         
         const curvatureControl = document.getElementById('curvature-control');
@@ -156,7 +159,7 @@
         
         let currentTool = 'pen';
         let currentColor = '#000000';
-        let currentBaseSize = 4;
+        let currentBaseSize = 2; // ปรับค่าเริ่มต้นเป็นขนาด S (2)
         let currentCurvatureFactor = 50; 
         let currentTextSize = 24;
         let isDoubleCircle = false; 
@@ -176,7 +179,6 @@
         let isDraggingText = false;
         let textDragOffset = { x: 0, y: 0 };
 
-        // ตัวแปรสำหรับการเลือก ลาก และลบวัตถุ
         let selectedObject = null;
         let isDraggingObject = false;
         let dragOffset = { x: 0, y: 0 };
@@ -194,9 +196,15 @@
         let activeGuides = [];
         let guideTimeout = null;
 
-        const SHAPE = { RECT_W: 160, RECT_H: 80, CLOUD_W: 70, CLOUD_H: 45, VALVE_W: 60, VALVE_H: 40 };
+        const SHAPE = { 
+            RECT_W: 160, RECT_H: 80, 
+            CLOUD_W: 70, CLOUD_H: 45, 
+            VALVE_W: 60, VALVE_H: 40,
+            OVAL_W: 128, OVAL_H: 64,  
+            DIAMOND_W: 160, DIAMOND_H: 100, 
+            PARA_W: 160, PARA_H: 80
+        };
 
-        // ฟังก์ชันลบวัตถุที่เลือก
         function deleteSelected() {
             if (selectedObject) {
                 const index = sceneObjects.indexOf(selectedObject);
@@ -210,10 +218,9 @@
             }
         }
 
-        // ดักจับการกดปุ่ม Delete หรือ Backspace บนคีย์บอร์ด
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObject && currentTool === 'select') {
-                if (document.activeElement.tagName === 'INPUT') return; // ป้องกันการลบขณะพิมพ์ข้อความ
+                if (document.activeElement.tagName === 'INPUT') return; 
                 deleteSelected();
             }
         });
@@ -264,7 +271,6 @@
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
             textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
 
-            // ซ่อนปุ่มลบและล้างการเลือกหากเปลี่ยนไปใช้เครื่องมืออื่น
             if (tool !== 'select') {
                 selectedObject = null;
                 document.getElementById('btn-delete-selected').style.display = 'none';
@@ -405,7 +411,6 @@
         function saveImage() {
             if (activeTextInput) finalizeTextInput();
             
-            // ยกเลิกการเลือกชั่วคราวก่อนเซฟรูป เพื่อไม่ให้ติดกรอบเส้นประ
             let tempSelected = selectedObject;
             selectedObject = null;
             renderScene();
@@ -425,7 +430,6 @@
             link.href = getCanvasWithWhiteBackground().toDataURL('image/png');
             link.click();
 
-            // นำการเลือกกลับมา
             selectedObject = tempSelected;
             renderScene();
         }
@@ -449,11 +453,11 @@
 
         function getShapeBox(obj) {
             let box = null;
-            if (obj.type === 'rect') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
-            else if (obj.type === 'cloud') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
-            else if (obj.type === 'valve-h') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
-            else if (obj.type === 'valve-v') box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
-            else if (obj.type === 'circle') box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            } else if (obj.type === 'circle') {
+                box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
+            }
             
             if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v');
             return box;
@@ -615,6 +619,7 @@
             return cleanResult;
         }
 
+        // วาดเส้นแบบความหนาคงที่ แต่ยังได้ความลื่นไหลจาก Low Latency
         function drawSmoothPath(c, pathData) {
             if (!pathData.points || pathData.points.length === 0) return;
             c.beginPath();
@@ -750,10 +755,36 @@
             applyCamera(ctx);
             
             sceneObjects.forEach(obj => {
+                if (obj.type === 'text') return; 
+
                 if (obj.type === 'pen' || obj.type === 'eraser') {
                     drawSmoothPath(ctx, obj);
                 } else if (obj.type === 'rect') {
                     ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
+                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                } else if (obj.type === 'oval') {
+                    ctx.beginPath();
+                    ctx.ellipse(obj.x + obj.w/2, obj.y + obj.h/2, obj.w/2, obj.h/2, 0, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                } else if (obj.type === 'diamond') {
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x + obj.w/2, obj.y);
+                    ctx.lineTo(obj.x + obj.w, obj.y + obj.h/2);
+                    ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h);
+                    ctx.lineTo(obj.x, obj.y + obj.h/2);
+                    ctx.closePath();
+                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                } else if (obj.type === 'parallelogram') {
+                    let offset = obj.w * 0.2;
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x + offset, obj.y);
+                    ctx.lineTo(obj.x + obj.w, obj.y);
+                    ctx.lineTo(obj.x + obj.w - offset, obj.y + obj.h);
+                    ctx.lineTo(obj.x, obj.y + obj.h);
+                    ctx.closePath();
                     ctx.fillStyle = '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'cloud') {
@@ -773,7 +804,11 @@
                     } else if (obj.p1 && obj.p2) {
                         if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
                     }
-                } else if (obj.type === 'text') {
+                }
+            });
+
+            sceneObjects.forEach(obj => {
+                if (obj.type === 'text') {
                     ctx.fillStyle = obj.color;
                     let fontStyle = obj.isItalic ? 'italic ' : '';
                     let fontWeight = obj.isBold ? 'bold ' : '';
@@ -799,7 +834,6 @@
                 }
             });
 
-            // วาดเส้น Grid Guides
             if (activeGuides.length > 0) {
                 ctx.save();
                 ctx.strokeStyle = '#34C759'; 
@@ -820,7 +854,6 @@
                 ctx.restore();
             }
 
-            // วาดกรอบสี่เหลี่ยมรอบวัตถุที่ถูกเลือก (Selection Box)
             if (selectedObject && currentTool === 'select') {
                 let box = getBoundingBox(selectedObject);
                 if (box) {
@@ -952,24 +985,30 @@
             });
         }
 
-        // ฟังก์ชันตรวจสอบการสัมผัสโดนวัตถุ
         function getHitObject(wx, wy) {
             for (let i = sceneObjects.length - 1; i >= 0; i--) {
                 const obj = sceneObjects[i];
-                if (['rect', 'cloud', 'valve-h', 'valve-v'].includes(obj.type)) {
-                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y && wy <= obj.y + obj.h) {
-                        return { index: i, object: obj };
-                    }
-                } else if (obj.type === 'circle') {
-                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) {
-                        return { index: i, object: obj };
-                    }
-                } else if (obj.type === 'text') {
+                if (obj.type === 'text') {
                     ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
                     const metrics = ctx.measureText(obj.isAllCaps ? obj.text.toUpperCase() : obj.text);
                     const w = metrics.width;
                     const h = obj.fontSize;
                     if (wx >= obj.x - w / 2 && wx <= obj.x + w / 2 && wy >= obj.y - h / 2 && wy <= obj.y + h / 2) {
+                        return { index: i, object: obj };
+                    }
+                }
+            }
+
+            for (let i = sceneObjects.length - 1; i >= 0; i--) {
+                const obj = sceneObjects[i];
+                if (obj.type === 'text') continue; 
+
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y && wy <= obj.y + obj.h) {
+                        return { index: i, object: obj };
+                    }
+                } else if (obj.type === 'circle') {
+                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) {
                         return { index: i, object: obj };
                     }
                 } else if (['pen', 'arrow', 'eraser'].includes(obj.type)) {
@@ -1046,7 +1085,6 @@
                 if (currentTool !== 'text' && currentTool !== 'select') return; 
             }
 
-            // จัดการการเลือกวัตถุ
             if (currentTool === 'select') {
                 const hit = getHitObject(wx, wy);
                 if (hit) {
@@ -1056,7 +1094,7 @@
                     
                     document.getElementById('btn-delete-selected').style.display = 'flex';
 
-                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text'].includes(selectedObject.type)) {
+                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
                         dragOffset.x = wx - selectedObject.x;
                         dragOffset.y = wy - selectedObject.y;
                     } else {
@@ -1078,7 +1116,13 @@
                 createTextInput(wx, wy, e.clientX, e.clientY);
             } else if (currentTool === 'pen' || currentTool === 'eraser') {
                 isDrawing = true; 
-                currentPath = { type: currentTool, color: currentColor, baseSize: currentBaseSize, points: [{x: wx, y: wy}] };
+                
+                currentPath = { 
+                    type: currentTool, 
+                    color: currentColor, 
+                    baseSize: currentBaseSize, 
+                    points: [{x: wx, y: wy}] 
+                };
                 if (currentTool === 'eraser') {
                     sceneObjects.push(currentPath);
                     resetUndoCounter();
@@ -1095,7 +1139,7 @@
                         points: [arrowStartPoint]
                     };
                 }
-            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle'].includes(currentTool)) {
+            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'oval', 'diamond', 'parallelogram'].includes(currentTool)) {
                 let center = getAlignedCenter(wx, wy);
                 activeGuides = center.guides;
                 if (guideTimeout) clearTimeout(guideTimeout);
@@ -1103,6 +1147,12 @@
 
                 if (currentTool === 'rect') {
                     sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
+                } else if (currentTool === 'oval') {
+                    sceneObjects.push({ type: 'oval', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.OVAL_W/2, y: center.y - SHAPE.OVAL_H/2, w: SHAPE.OVAL_W, h: SHAPE.OVAL_H }); 
+                } else if (currentTool === 'diamond') {
+                    sceneObjects.push({ type: 'diamond', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.DIAMOND_W/2, y: center.y - SHAPE.DIAMOND_H/2, w: SHAPE.DIAMOND_W, h: SHAPE.DIAMOND_H }); 
+                } else if (currentTool === 'parallelogram') {
+                    sceneObjects.push({ type: 'parallelogram', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.PARA_W/2, y: center.y - SHAPE.PARA_H/2, w: SHAPE.PARA_W, h: SHAPE.PARA_H }); 
                 } else if (currentTool === 'cloud') {
                     sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
                 } else if (currentTool === 'valve-h') {
@@ -1151,9 +1201,8 @@
             
             const worldPos = getWorldPos(e.clientX, e.clientY);
 
-            // จัดการการอัปเดตตำแหน่งวัตถุขณะลาก
             if (currentTool === 'select' && isDraggingObject && selectedObject) {
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text'].includes(selectedObject.type)) {
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
                     selectedObject.x = worldPos.x - dragOffset.x;
                     selectedObject.y = worldPos.y - dragOffset.y;
                 } else {
@@ -1178,14 +1227,27 @@
             if (isDrawing && currentPath && (currentTool === 'pen' || currentTool === 'eraser')) {
                 const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) ? e.getCoalescedEvents() : [e];
                 for (let ev of events) {
-                    currentPath.points.push(getWorldPos(ev.clientX || e.clientX, ev.clientY || e.clientY));
+                    const pos = getWorldPos(ev.clientX || e.clientX, ev.clientY || e.clientY);
+                    currentPath.points.push({ x: pos.x, y: pos.y });
                 }
                 
                 if (currentTool === 'pen') {
                     pCtx.setTransform(1, 0, 0, 1, 0, 0); 
                     pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
                     applyCamera(pCtx);
-                    drawSmoothPath(pCtx, currentPath);
+                    
+                    let renderPath = currentPath;
+                    if (e.getPredictedEvents && e.pointerType === 'pen') {
+                        const predicted = e.getPredictedEvents();
+                        if (predicted.length > 0) {
+                            renderPath = { ...currentPath, points: [...currentPath.points] };
+                            for (let ev of predicted) {
+                                const pos = getWorldPos(ev.clientX, ev.clientY);
+                                renderPath.points.push({ x: pos.x, y: pos.y });
+                            }
+                        }
+                    }
+                    drawSmoothPath(pCtx, renderPath);
                 } else if (currentTool === 'eraser') {
                     renderScene();
                 }
@@ -1224,7 +1286,6 @@
 
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-            // เคลียร์สถานะเมื่อลากวัตถุเสร็จ (ยังคงสถานะเลือกเอาไว้ เพื่อให้ลบได้)
             if (currentTool === 'select' && isDraggingObject) {
                 isDraggingObject = false;
                 if (selectedObject) {
