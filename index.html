@@ -65,7 +65,10 @@
 
     <div id="toolbar">
         <div class="tool-group">
-            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ">✍️</button>
+            <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ">👆</button>
+            <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
+            
+            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;">✍️</button>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ">🔤</button>
                 <div id="text-format-control" class="shape-control-group">
@@ -173,6 +176,12 @@
         let isDraggingText = false;
         let textDragOffset = { x: 0, y: 0 };
 
+        // ตัวแปรสำหรับการเลือก ลาก และลบวัตถุ
+        let selectedObject = null;
+        let isDraggingObject = false;
+        let dragOffset = { x: 0, y: 0 };
+        let dragStartPoint = { x: 0, y: 0 };
+
         let camera = { x: 0, y: 0, scale: 1 };
         let activeTouchPointers = new Map();
         let isPanning = false;
@@ -186,6 +195,28 @@
         let guideTimeout = null;
 
         const SHAPE = { RECT_W: 160, RECT_H: 80, CLOUD_W: 70, CLOUD_H: 45, VALVE_W: 60, VALVE_H: 40 };
+
+        // ฟังก์ชันลบวัตถุที่เลือก
+        function deleteSelected() {
+            if (selectedObject) {
+                const index = sceneObjects.indexOf(selectedObject);
+                if (index > -1) {
+                    sceneObjects.splice(index, 1);
+                    selectedObject = null;
+                    document.getElementById('btn-delete-selected').style.display = 'none';
+                    resetUndoCounter();
+                    renderScene();
+                }
+            }
+        }
+
+        // ดักจับการกดปุ่ม Delete หรือ Backspace บนคีย์บอร์ด
+        window.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObject && currentTool === 'select') {
+                if (document.activeElement.tagName === 'INPUT') return; // ป้องกันการลบขณะพิมพ์ข้อความ
+                deleteSelected();
+            }
+        });
 
         function applyCamera(context) {
             const dpr = window.devicePixelRatio || 1;
@@ -232,6 +263,13 @@
             curvatureControl.style.display = currentTool.includes('curved') ? 'flex' : 'none';
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
             textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
+
+            // ซ่อนปุ่มลบและล้างการเลือกหากเปลี่ยนไปใช้เครื่องมืออื่น
+            if (tool !== 'select') {
+                selectedObject = null;
+                document.getElementById('btn-delete-selected').style.display = 'none';
+                renderScene();
+            }
         }
 
         function toggleTextFormat(format, btn) {
@@ -272,11 +310,7 @@
         }
         function toggleDoubleEdge() { isDoubleCircle = doubleEdgeCheck.checked; } 
         
-        function clearBoard() { sceneObjects = []; resetView(); }
-
-        function pushToScene(newObj) {
-            sceneObjects.push(newObj);
-        }
+        function clearBoard() { sceneObjects = []; selectedObject = null; document.getElementById('btn-delete-selected').style.display = 'none'; resetView(); }
 
         let undoCount = 0;
         let undoLimit = 2;
@@ -285,7 +319,11 @@
             if (activeTextInput) finalizeTextInput();
             
             if (sceneObjects.length > 0 && undoCount < undoLimit) {
-                sceneObjects.pop(); 
+                let removed = sceneObjects.pop(); 
+                if (removed === selectedObject) {
+                    selectedObject = null;
+                    document.getElementById('btn-delete-selected').style.display = 'none';
+                }
                 undoCount++; 
                 renderScene();      
             } else if (undoCount >= undoLimit) {
@@ -349,6 +387,8 @@
                     if (data.objects && data.camera) {
                         sceneObjects = data.objects;
                         camera = data.camera;
+                        selectedObject = null;
+                        document.getElementById('btn-delete-selected').style.display = 'none';
                         resetUndoCounter();
                         renderScene();
                     } else {
@@ -365,26 +405,45 @@
         function saveImage() {
             if (activeTextInput) finalizeTextInput();
             
+            // ยกเลิกการเลือกชั่วคราวก่อนเซฟรูป เพื่อไม่ให้ติดกรอบเส้นประ
+            let tempSelected = selectedObject;
+            selectedObject = null;
+            renderScene();
+
             const defaultName = 'sd-diagram';
-            
             let fileName = prompt("ตั้งชื่อรูปภาพที่ต้องการบันทึก (ไม่ต้องพิมพ์ .png):", defaultName);
             
-            if (fileName === null) return;
+            if (fileName === null) {
+                selectedObject = tempSelected;
+                renderScene();
+                return;
+            }
             if (fileName.trim() === "") fileName = defaultName;
 
             const link = document.createElement('a');
             link.download = `${fileName}.png`;
             link.href = getCanvasWithWhiteBackground().toDataURL('image/png');
             link.click();
+
+            // นำการเลือกกลับมา
+            selectedObject = tempSelected;
+            renderScene();
         }
 
         async function shareImage() {
+            let tempSelected = selectedObject;
+            selectedObject = null;
+            renderScene();
+
             getCanvasWithWhiteBackground().toBlob(async (blob) => {
                 if (navigator.share) {
                     const file = new File([blob], 'sd-diagram.png', { type: 'image/png' });
                     try { await navigator.share({ files: [file], title: 'System Dynamics Diagram' }); } 
                     catch (error) { console.log('ยกเลิกการแชร์:', error); }
                 } else { alert('เบราว์เซอร์ไม่รองรับการแชร์ไฟล์ภาพ กรุณาใช้ปุ่มบันทึกแทน'); }
+                
+                selectedObject = tempSelected;
+                renderScene();
             }, 'image/png');
         }
 
@@ -398,6 +457,24 @@
             
             if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v');
             return box;
+        }
+
+        function getBoundingBox(obj) {
+            let box = getShapeBox(obj);
+            if (box) return box;
+
+            if (obj.type === 'text') {
+                ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
+                const metrics = ctx.measureText(obj.isAllCaps ? obj.text.toUpperCase() : obj.text);
+                return { left: obj.x - metrics.width/2, right: obj.x + metrics.width/2, top: obj.y - obj.fontSize/2, bottom: obj.y + obj.fontSize/2 };
+            } else if (obj.points) {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                obj.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+                return { left: minX, right: maxX, top: minY, bottom: maxY };
+            } else if (obj.p1 && obj.p2) {
+                return { left: Math.min(obj.p1.x, obj.p2.x), right: Math.max(obj.p1.x, obj.p2.x), top: Math.min(obj.p1.y, obj.p2.y), bottom: Math.max(obj.p1.y, obj.p2.y) };
+            }
+            return null;
         }
 
         function getAlignedCenter(cx, cy) {
@@ -722,6 +799,7 @@
                 }
             });
 
+            // วาดเส้น Grid Guides
             if (activeGuides.length > 0) {
                 ctx.save();
                 ctx.strokeStyle = '#34C759'; 
@@ -740,6 +818,20 @@
                     ctx.stroke();
                 });
                 ctx.restore();
+            }
+
+            // วาดกรอบสี่เหลี่ยมรอบวัตถุที่ถูกเลือก (Selection Box)
+            if (selectedObject && currentTool === 'select') {
+                let box = getBoundingBox(selectedObject);
+                if (box) {
+                    ctx.save();
+                    ctx.strokeStyle = '#007AFF';
+                    ctx.lineWidth = 2 / camera.scale;
+                    ctx.setLineDash([5 / camera.scale, 5 / camera.scale]);
+                    const pad = 8;
+                    ctx.strokeRect(box.left - pad, box.top - pad, (box.right - box.left) + pad * 2, (box.bottom - box.top) + pad * 2);
+                    ctx.restore();
+                }
             }
         }
 
@@ -860,6 +952,46 @@
             });
         }
 
+        // ฟังก์ชันตรวจสอบการสัมผัสโดนวัตถุ
+        function getHitObject(wx, wy) {
+            for (let i = sceneObjects.length - 1; i >= 0; i--) {
+                const obj = sceneObjects[i];
+                if (['rect', 'cloud', 'valve-h', 'valve-v'].includes(obj.type)) {
+                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y && wy <= obj.y + obj.h) {
+                        return { index: i, object: obj };
+                    }
+                } else if (obj.type === 'circle') {
+                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) {
+                        return { index: i, object: obj };
+                    }
+                } else if (obj.type === 'text') {
+                    ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
+                    const metrics = ctx.measureText(obj.isAllCaps ? obj.text.toUpperCase() : obj.text);
+                    const w = metrics.width;
+                    const h = obj.fontSize;
+                    if (wx >= obj.x - w / 2 && wx <= obj.x + w / 2 && wy >= obj.y - h / 2 && wy <= obj.y + h / 2) {
+                        return { index: i, object: obj };
+                    }
+                } else if (['pen', 'arrow', 'eraser'].includes(obj.type)) {
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    if (obj.points) {
+                        obj.points.forEach(p => {
+                            minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+                            maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+                        });
+                    } else if (obj.p1 && obj.p2) {
+                        minX = Math.min(obj.p1.x, obj.p2.x); minY = Math.min(obj.p1.y, obj.p2.y);
+                        maxX = Math.max(obj.p1.x, obj.p2.x); maxY = Math.max(obj.p1.y, obj.p2.y);
+                    }
+                    const pad = 15;
+                    if (wx >= minX - pad && wx <= maxX + pad && wy >= minY - pad && wy <= maxY + pad) {
+                         return { index: i, object: obj };
+                    }
+                }
+            }
+            return null;
+        }
+
         container.addEventListener('pointermove', (e) => {
             if (isDraggingText && activeTextInput) {
                 e.preventDefault();
@@ -911,7 +1043,35 @@
             
             if (activeTextInput && !isDraggingText) {
                 finalizeTextInput();
-                if (currentTool !== 'text') return; 
+                if (currentTool !== 'text' && currentTool !== 'select') return; 
+            }
+
+            // จัดการการเลือกวัตถุ
+            if (currentTool === 'select') {
+                const hit = getHitObject(wx, wy);
+                if (hit) {
+                    selectedObject = hit.object;
+                    sceneObjects.splice(hit.index, 1);
+                    sceneObjects.push(selectedObject);
+                    
+                    document.getElementById('btn-delete-selected').style.display = 'flex';
+
+                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text'].includes(selectedObject.type)) {
+                        dragOffset.x = wx - selectedObject.x;
+                        dragOffset.y = wy - selectedObject.y;
+                    } else {
+                        dragStartPoint = { x: wx, y: wy };
+                        selectedObject._origPoints = selectedObject.points ? JSON.parse(JSON.stringify(selectedObject.points)) : null;
+                        selectedObject._origP1 = selectedObject.p1 ? { ...selectedObject.p1 } : null;
+                        selectedObject._origP2 = selectedObject.p2 ? { ...selectedObject.p2 } : null;
+                    }
+                    isDraggingObject = true;
+                } else {
+                    selectedObject = null;
+                    document.getElementById('btn-delete-selected').style.display = 'none';
+                }
+                renderScene();
+                return;
             }
 
             if (currentTool === 'text') {
@@ -991,6 +1151,30 @@
             
             const worldPos = getWorldPos(e.clientX, e.clientY);
 
+            // จัดการการอัปเดตตำแหน่งวัตถุขณะลาก
+            if (currentTool === 'select' && isDraggingObject && selectedObject) {
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text'].includes(selectedObject.type)) {
+                    selectedObject.x = worldPos.x - dragOffset.x;
+                    selectedObject.y = worldPos.y - dragOffset.y;
+                } else {
+                    const dx = worldPos.x - dragStartPoint.x;
+                    const dy = worldPos.y - dragStartPoint.y;
+                    if (selectedObject.points && selectedObject._origPoints) {
+                        for (let i = 0; i < selectedObject.points.length; i++) {
+                            selectedObject.points[i].x = selectedObject._origPoints[i].x + dx;
+                            selectedObject.points[i].y = selectedObject._origPoints[i].y + dy;
+                        }
+                    } else if (selectedObject.p1 && selectedObject._origP1) {
+                        selectedObject.p1.x = selectedObject._origP1.x + dx;
+                        selectedObject.p1.y = selectedObject._origP1.y + dy;
+                        selectedObject.p2.x = selectedObject._origP2.x + dx;
+                        selectedObject.p2.y = selectedObject._origP2.y + dy;
+                    }
+                }
+                renderScene();
+                return;
+            }
+
             if (isDrawing && currentPath && (currentTool === 'pen' || currentTool === 'eraser')) {
                 const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) ? e.getCoalescedEvents() : [e];
                 for (let ev of events) {
@@ -1039,6 +1223,17 @@
             }
 
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+
+            // เคลียร์สถานะเมื่อลากวัตถุเสร็จ (ยังคงสถานะเลือกเอาไว้ เพื่อให้ลบได้)
+            if (currentTool === 'select' && isDraggingObject) {
+                isDraggingObject = false;
+                if (selectedObject) {
+                    if (selectedObject._origPoints) delete selectedObject._origPoints;
+                    if (selectedObject._origP1) delete selectedObject._origP1;
+                    if (selectedObject._origP2) delete selectedObject._origP2;
+                }
+                return;
+            }
 
             if (isDrawing && (currentTool === 'pen' || currentTool === 'eraser')) {
                 if (currentTool === 'pen' && currentPath) {
