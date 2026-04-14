@@ -65,7 +65,7 @@
 
     <div id="toolbar">
         <div class="tool-group">
-            <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ">👆</button>
+            <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (วงล้อมเพื่อเลือกหลายอันได้)">👆</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
             <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;">✍️</button>
@@ -191,8 +191,11 @@
         let textDragOffset = { x: 0, y: 0 };
 
         let selectedObject = null;
+        let multiSelectedObjects = [];
+        let isLassoing = false;
+        let lassoPoints = [];
+
         let isDraggingObject = false;
-        let dragOffset = { x: 0, y: 0 };
         let dragStartPoint = { x: 0, y: 0 };
 
         let camera = { x: 0, y: 0, scale: 1 };
@@ -220,6 +223,35 @@
             PARA_W: 160, PARA_H: 80
         };
 
+        // --- เพิ่มฟังก์ชัน Ray-Casting Algorithm สำหรับหาจุดศูนย์กลางที่อยู่ในเขตวงล้อม ---
+        function isPointInPolygon(point, vs) {
+            let x = point.x, y = point.y;
+            let inside = false;
+            for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                let xi = vs[i].x, yi = vs[i].y;
+                let xj = vs[j].x, yj = vs[j].y;
+                let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function snapshotOriginalPosition(obj) {
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                obj._origX = obj.x;
+                obj._origY = obj.y;
+            } else {
+                obj._origPoints = obj.points ? JSON.parse(JSON.stringify(obj.points)) : null;
+                obj._origP1 = obj.p1 ? { ...obj.p1 } : null;
+                obj._origP2 = obj.p2 ? { ...obj.p2 } : null;
+            }
+        }
+
+        function cleanupOriginalPosition(obj) {
+            delete obj._origX; delete obj._origY;
+            delete obj._origPoints; delete obj._origP1; delete obj._origP2;
+        }
+
         function toggleFillGray() {
             isFillLightGray = document.getElementById('fill-gray-check').checked;
             if (selectedObject && ['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
@@ -229,20 +261,22 @@
         }
 
         function deleteSelected() {
-            if (selectedObject) {
+            if (multiSelectedObjects.length > 0) {
+                sceneObjects = sceneObjects.filter(obj => !multiSelectedObjects.includes(obj));
+            } else if (selectedObject) {
                 const index = sceneObjects.indexOf(selectedObject);
-                if (index > -1) {
-                    sceneObjects.splice(index, 1);
-                    selectedObject = null;
-                    document.getElementById('btn-delete-selected').style.display = 'none';
-                    resetUndoCounter();
-                    renderScene();
-                }
+                if (index > -1) sceneObjects.splice(index, 1);
             }
+            
+            selectedObject = null;
+            multiSelectedObjects = [];
+            document.getElementById('btn-delete-selected').style.display = 'none';
+            resetUndoCounter();
+            renderScene();
         }
 
         window.addEventListener('keydown', (e) => {
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObject && currentTool === 'select') {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedObject || multiSelectedObjects.length > 0) && currentTool === 'select') {
                 if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; 
                 deleteSelected();
             }
@@ -306,6 +340,9 @@
 
             if (tool !== 'select') {
                 selectedObject = null;
+                multiSelectedObjects = [];
+                isLassoing = false;
+                lassoPoints = [];
                 document.getElementById('btn-delete-selected').style.display = 'none';
                 renderScene();
             }
@@ -368,7 +405,6 @@
                 if(activeTextInput) {
                     activeTextInput.style.fontSize = (parsedValue * camera.scale) + 'px';
                     activeTextInput.setAttribute('data-size', parsedValue);
-                    
                     activeTextInput.style.height = 'auto';
                     activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
                 }
@@ -376,7 +412,7 @@
         }
         function toggleDoubleEdge() { isDoubleCircle = doubleEdgeCheck.checked; } 
         
-        function clearBoard() { sceneObjects = []; selectedObject = null; document.getElementById('btn-delete-selected').style.display = 'none'; resetView(); }
+        function clearBoard() { sceneObjects = []; selectedObject = null; multiSelectedObjects = []; document.getElementById('btn-delete-selected').style.display = 'none'; resetView(); }
 
         let undoCount = 0;
         let undoLimit = 2;
@@ -389,6 +425,10 @@
                 if (removed === selectedObject) {
                     selectedObject = null;
                     document.getElementById('btn-delete-selected').style.display = 'none';
+                }
+                if (multiSelectedObjects.includes(removed)) {
+                    multiSelectedObjects = multiSelectedObjects.filter(o => o !== removed);
+                    if(multiSelectedObjects.length === 0) document.getElementById('btn-delete-selected').style.display = 'none';
                 }
                 undoCount++; 
                 renderScene();      
@@ -454,6 +494,7 @@
                         sceneObjects = data.objects;
                         camera = data.camera;
                         selectedObject = null;
+                        multiSelectedObjects = [];
                         document.getElementById('btn-delete-selected').style.display = 'none';
                         resetUndoCounter();
                         renderScene();
@@ -472,7 +513,9 @@
             if (activeTextInput) finalizeTextInput();
             
             let tempSelected = selectedObject;
+            let tempMultiSelected = [...multiSelectedObjects];
             selectedObject = null;
+            multiSelectedObjects = [];
             renderScene();
 
             const defaultName = 'sd-diagram';
@@ -480,6 +523,7 @@
             
             if (fileName === null) {
                 selectedObject = tempSelected;
+                multiSelectedObjects = tempMultiSelected;
                 renderScene();
                 return;
             }
@@ -491,12 +535,15 @@
             link.click();
 
             selectedObject = tempSelected;
+            multiSelectedObjects = tempMultiSelected;
             renderScene();
         }
 
         async function shareImage() {
             let tempSelected = selectedObject;
+            let tempMultiSelected = [...multiSelectedObjects];
             selectedObject = null;
+            multiSelectedObjects = [];
             renderScene();
 
             getCanvasWithWhiteBackground().toBlob(async (blob) => {
@@ -507,6 +554,7 @@
                 } else { alert('เบราว์เซอร์ไม่รองรับการแชร์ไฟล์ภาพ กรุณาใช้ปุ่มบันทึกแทน'); }
                 
                 selectedObject = tempSelected;
+                multiSelectedObjects = tempMultiSelected;
                 renderScene();
             }, 'image/png');
         }
@@ -535,13 +583,13 @@
                     maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
                 });
                 let totalHeight = lines.length * (obj.fontSize * 1.2);
-                return { left: obj.x - maxWidth/2, right: obj.x + maxWidth/2, top: obj.y - totalHeight/2, bottom: obj.y + totalHeight/2 };
+                return { left: obj.x - maxWidth/2, right: obj.x + maxWidth/2, top: obj.y - totalHeight/2, bottom: obj.y + totalHeight/2, cx: obj.x, cy: obj.y };
             } else if (obj.points) {
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                 obj.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
-                return { left: minX, right: maxX, top: minY, bottom: maxY };
+                return { left: minX, right: maxX, top: minY, bottom: maxY, cx: (minX + maxX)/2, cy: (minY + maxY)/2 };
             } else if (obj.p1 && obj.p2) {
-                return { left: Math.min(obj.p1.x, obj.p2.x), right: Math.max(obj.p1.x, obj.p2.x), top: Math.min(obj.p1.y, obj.p2.y), bottom: Math.max(obj.p1.y, obj.p2.y) };
+                return { left: Math.min(obj.p1.x, obj.p2.x), right: Math.max(obj.p1.x, obj.p2.x), top: Math.min(obj.p1.y, obj.p2.y), bottom: Math.max(obj.p1.y, obj.p2.y), cx: (obj.p1.x + obj.p2.x)/2, cy: (obj.p1.y + obj.p2.y)/2 };
             }
             return null;
         }
@@ -984,17 +1032,42 @@
                 ctx.restore();
             }
 
-            if (selectedObject && currentTool === 'select') {
-                let box = getBoundingBox(selectedObject);
-                if (box) {
-                    ctx.save();
-                    ctx.strokeStyle = '#007AFF';
-                    ctx.lineWidth = 2 / camera.scale;
-                    ctx.setLineDash([5 / camera.scale, 5 / camera.scale]);
-                    const pad = 8;
-                    ctx.strokeRect(box.left - pad, box.top - pad, (box.right - box.left) + pad * 2, (box.bottom - box.top) + pad * 2);
-                    ctx.restore();
+            // แสดงเส้นล้อมขณะกำลังลาก Lasso
+            if (lassoPoints.length > 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+                for(let i = 1; i < lassoPoints.length; i++){
+                    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
                 }
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(0, 122, 255, 0.1)';
+                ctx.fill();
+                ctx.strokeStyle = '#007AFF';
+                ctx.lineWidth = 1.5 / camera.scale;
+                ctx.setLineDash([6 / camera.scale, 6 / camera.scale]);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // วาดกรอบสี่เหลี่ยมคลุมวัตถุที่ถูกเลือก (ทั้งเดี่ยวและหลายชิ้น)
+            if (currentTool === 'select') {
+                let toDrawBoxes = [];
+                if (selectedObject) toDrawBoxes.push(selectedObject);
+                if (multiSelectedObjects.length > 0) toDrawBoxes = toDrawBoxes.concat(multiSelectedObjects);
+
+                toDrawBoxes.forEach(obj => {
+                    let box = getBoundingBox(obj);
+                    if (box) {
+                        ctx.save();
+                        ctx.strokeStyle = '#007AFF';
+                        ctx.lineWidth = 2 / camera.scale;
+                        ctx.setLineDash([5 / camera.scale, 5 / camera.scale]);
+                        const pad = 8;
+                        ctx.strokeRect(box.left - pad, box.top - pad, (box.right - box.left) + pad * 2, (box.bottom - box.top) + pad * 2);
+                        ctx.restore();
+                    }
+                });
             }
         }
 
@@ -1283,32 +1356,40 @@
                 if (hit) {
                     lastClickTime = now;
                     lastClickObj = hit.object;
-                    selectedObject = hit.object;
-                    sceneObjects.splice(hit.index, 1);
-                    sceneObjects.push(selectedObject);
                     
-                    document.getElementById('btn-delete-selected').style.display = 'flex';
-
-                    if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
-                        document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
-                        isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
-                    }
-
-                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
-                        dragOffset.x = wx - selectedObject.x;
-                        dragOffset.y = wy - selectedObject.y;
-                    } else {
+                    if (multiSelectedObjects.includes(hit.object)) {
+                        // คลิกลงบนวัตถุที่อยู่ในกลุ่มเลือกหลายอัน เตรียมลากทั้งกลุ่ม
+                        isDraggingObject = true;
                         dragStartPoint = { x: wx, y: wy };
-                        selectedObject._origPoints = selectedObject.points ? JSON.parse(JSON.stringify(selectedObject.points)) : null;
-                        selectedObject._origP1 = selectedObject.p1 ? { ...selectedObject.p1 } : null;
-                        selectedObject._origP2 = selectedObject.p2 ? { ...selectedObject.p2 } : null;
+                        multiSelectedObjects.forEach(o => snapshotOriginalPosition(o));
+                    } else {
+                        // คลิกเลือกวัตถุเดียวใหม่
+                        multiSelectedObjects = [];
+                        selectedObject = hit.object;
+                        sceneObjects.splice(hit.index, 1);
+                        sceneObjects.push(selectedObject);
+                        
+                        document.getElementById('btn-delete-selected').style.display = 'flex';
+
+                        if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
+                            document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
+                            isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
+                        }
+
+                        isDraggingObject = true;
+                        dragStartPoint = { x: wx, y: wy };
+                        snapshotOriginalPosition(selectedObject);
                     }
-                    isDraggingObject = true;
                 } else {
+                    // คลิกที่ว่าง -> เริ่มการวาด Lasso
                     lastClickTime = 0;
                     lastClickObj = null;
                     selectedObject = null;
+                    multiSelectedObjects = [];
                     document.getElementById('btn-delete-selected').style.display = 'none';
+                    
+                    isLassoing = true;
+                    lassoPoints = [{x: wx, y: wy}];
                 }
                 renderScene();
                 return;
@@ -1405,27 +1486,40 @@
             
             const worldPos = getWorldPos(e.clientX, e.clientY);
 
-            if (currentTool === 'select' && isDraggingObject && selectedObject) {
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
-                    selectedObject.x = worldPos.x - dragOffset.x;
-                    selectedObject.y = worldPos.y - dragOffset.y;
-                } else {
+            if (currentTool === 'select') {
+                if (isLassoing) {
+                    lassoPoints.push({x: worldPos.x, y: worldPos.y});
+                    renderScene();
+                    return;
+                }
+
+                if (isDraggingObject) {
                     const dx = worldPos.x - dragStartPoint.x;
                     const dy = worldPos.y - dragStartPoint.y;
-                    if (selectedObject.points && selectedObject._origPoints) {
-                        for (let i = 0; i < selectedObject.points.length; i++) {
-                            selectedObject.points[i].x = selectedObject._origPoints[i].x + dx;
-                            selectedObject.points[i].y = selectedObject._origPoints[i].y + dy;
+
+                    let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
+
+                    draggingList.forEach(obj => {
+                        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                            obj.x = obj._origX + dx;
+                            obj.y = obj._origY + dy;
+                        } else {
+                            if (obj.points && obj._origPoints) {
+                                for (let i = 0; i < obj.points.length; i++) {
+                                    obj.points[i].x = obj._origPoints[i].x + dx;
+                                    obj.points[i].y = obj._origPoints[i].y + dy;
+                                }
+                            } else if (obj.p1 && obj._origP1) {
+                                obj.p1.x = obj._origP1.x + dx;
+                                obj.p1.y = obj._origP1.y + dy;
+                                obj.p2.x = obj._origP2.x + dx;
+                                obj.p2.y = obj._origP2.y + dy;
+                            }
                         }
-                    } else if (selectedObject.p1 && selectedObject._origP1) {
-                        selectedObject.p1.x = selectedObject._origP1.x + dx;
-                        selectedObject.p1.y = selectedObject._origP1.y + dy;
-                        selectedObject.p2.x = selectedObject._origP2.x + dx;
-                        selectedObject.p2.y = selectedObject._origP2.y + dy;
-                    }
+                    });
+                    renderScene();
+                    return;
                 }
-                renderScene();
-                return;
             }
 
             if (isDrawing && currentPath && (currentTool === 'pen' || currentTool === 'eraser')) {
@@ -1496,14 +1590,35 @@
 
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-            if (currentTool === 'select' && isDraggingObject) {
-                isDraggingObject = false;
-                if (selectedObject) {
-                    if (selectedObject._origPoints) delete selectedObject._origPoints;
-                    if (selectedObject._origP1) delete selectedObject._origP1;
-                    if (selectedObject._origP2) delete selectedObject._origP2;
+            if (currentTool === 'select') {
+                if (isLassoing) {
+                    isLassoing = false;
+                    if (lassoPoints.length > 2) {
+                        multiSelectedObjects = [];
+                        sceneObjects.forEach(obj => {
+                            let box = getBoundingBox(obj);
+                            if (box && box.cx !== undefined && box.cy !== undefined) {
+                                if (isPointInPolygon({x: box.cx, y: box.cy}, lassoPoints)) {
+                                    multiSelectedObjects.push(obj);
+                                }
+                            }
+                        });
+
+                        if (multiSelectedObjects.length > 0) {
+                            document.getElementById('btn-delete-selected').style.display = 'flex';
+                        }
+                    }
+                    lassoPoints = [];
+                    renderScene();
+                    return;
                 }
-                return;
+
+                if (isDraggingObject) {
+                    isDraggingObject = false;
+                    let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
+                    draggingList.forEach(obj => cleanupOriginalPosition(obj));
+                    return;
+                }
             }
 
             if (isDrawing && (currentTool === 'pen' || currentTool === 'eraser')) {
