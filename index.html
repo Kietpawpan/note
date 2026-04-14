@@ -91,6 +91,7 @@
             <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ">☁️</button>
             <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⏳</button>
             <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">⌛</button>
+            <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester">⋈</button>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม (Connector)">⭕</button>
                 <div id="double-edge-control" class="shape-control-group">
@@ -108,6 +109,7 @@
 
             <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">)</button>
+                <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)">〰</button>
                 <div id="curvature-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
                     <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
@@ -159,7 +161,7 @@
         
         let currentTool = 'pen';
         let currentColor = '#000000';
-        let currentBaseSize = 2; // ปรับค่าเริ่มต้นเป็นขนาด S (2)
+        let currentBaseSize = 2;
         let currentCurvatureFactor = 50; 
         let currentTextSize = 24;
         let isDoubleCircle = false; 
@@ -200,6 +202,7 @@
             RECT_W: 160, RECT_H: 80, 
             CLOUD_W: 70, CLOUD_H: 45, 
             VALVE_W: 60, VALVE_H: 40,
+            VALVE_POLY_W: 160, VALVE_POLY_H: 80, // ปรับความกว้างและสูงให้เท่ากับกล่องสี่เหลี่ยมผืนผ้า
             OVAL_W: 128, OVAL_H: 64,  
             DIAMOND_W: 160, DIAMOND_H: 100, 
             PARA_W: 160, PARA_H: 80
@@ -359,7 +362,7 @@
             const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, '');
             const defaultName = `sd-project-${dateStr}`;
             
-            let fileName = prompt("ตั้งชื่อไฟล์โปรเจกต์ที่ต้องการบันทึก (ไม่ต้องพิมพ์ .json):", defaultName);
+            let fileName = prompt("ตั้งชื่อไฟล์โปรเจกต์ที่ต้องการบันทึก (ไม่ต้องพิมพ์ .json):" , defaultName);
             
             if (fileName === null) return; 
             if (fileName.trim() === "") fileName = defaultName;
@@ -416,7 +419,7 @@
             renderScene();
 
             const defaultName = 'sd-diagram';
-            let fileName = prompt("ตั้งชื่อรูปภาพที่ต้องการบันทึก (ไม่ต้องพิมพ์ .png):", defaultName);
+            let fileName = prompt("ตั้งชื่อรูปภาพที่ต้องการบันทึก (ไม่ต้องพิมพ์ .png):" , defaultName);
             
             if (fileName === null) {
                 selectedObject = tempSelected;
@@ -443,7 +446,7 @@
                 if (navigator.share) {
                     const file = new File([blob], 'sd-diagram.png', { type: 'image/png' });
                     try { await navigator.share({ files: [file], title: 'System Dynamics Diagram' }); } 
-                    catch (error) { console.log('ยกเลิกการแชร์:', error); }
+                    catch (error) { console.log('ยกเลิกการแชร์:' , error); }
                 } else { alert('เบราว์เซอร์ไม่รองรับการแชร์ไฟล์ภาพ กรุณาใช้ปุ่มบันทึกแทน'); }
                 
                 selectedObject = tempSelected;
@@ -453,13 +456,13 @@
 
         function getShapeBox(obj) {
             let box = null;
-            if (['rect', 'cloud', 'valve-h', 'valve-v', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
                 box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
             } else if (obj.type === 'circle') {
                 box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
             }
             
-            if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v');
+            if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v' || obj.type === 'valve-poly');
             return box;
         }
 
@@ -619,7 +622,6 @@
             return cleanResult;
         }
 
-        // วาดเส้นแบบความหนาคงที่ แต่ยังได้ความลื่นไหลจาก Low Latency
         function drawSmoothPath(c, pathData) {
             if (!pathData.points || pathData.points.length === 0) return;
             c.beginPath();
@@ -680,6 +682,102 @@
             }
             c.strokeStyle = obj.color; c.lineWidth = obj.lineWidth || 4; c.stroke();
         }
+/*
+
+function drawValvePolyShape(c, obj) {
+            const {x, y, w, h, color, lineWidth} = obj;
+            const cy = y + h / 2;
+
+            // กำหนดจุดคอด (Neck) ให้ค่อนไปทางขวา (75% ของความกว้าง)
+            const neckX = x + w * 0.8;
+            const neckY = cy;
+
+            // ความสูงของหัววาล์วด้านขวา (ลดลงให้แคบกว่าด้านซ้ายเหลือ 60% ของความสูงซ้าย)
+            const headH = h * 0.6; 
+            
+            // คำนวณความยาวของเส้นขอบด้านบนและล่างแบบเดิม
+            const dx = w * 0.25; 
+            const dy = headH / 2; 
+            const slopeX = dx / dy; 
+            
+            const insetX = (h / 2) * slopeX; 
+            const origTopX = Math.max(x, neckX - insetX);
+            
+            // ปรับเพิ่มความยาวเส้นขอบด้านบนและด้านล่างให้ยาวขึ้นอีก 1 เท่า (ยาวเป็น 2 เท่าของของเดิม)
+            // (คงค่าการคำนวณเดิมไว้เพื่อให้ขอบยังคงยาวขึ้นตามที่คุณต้องการ)
+            const topX = x + ((origTopX - x) * 2);
+            const bottomX = x + ((origTopX - x) * 2); 
+
+            c.beginPath();
+            c.moveTo(x, y); // เริ่มที่มุมบนซ้ายสุดของขอบที่ขยายแล้ว
+            c.lineTo(topX, y); // วาดขอบบนไปจนถึงจุด slope
+
+            // --- ส่วนที่ปรับปรุงเพื่อให้เส้นทแยงมุมไขว้กัน ---
+            c.lineTo(neckX, neckY); // วาดเส้นทแยงมุมจากขอบบนลงมาที่จุด neck
+            // เปลี่ยนจุดสิ้นสุด: จากเดิมเชื่อมไปมุมบนขวา เปลี่ยนเป็นเชื่อมไปมุมล่างขวา
+            c.lineTo(x + w, cy + headH / 2); 
+
+            c.lineTo(x + w, cy - headH / 2); // วาดขอบตั้งด้านขวาขึ้นไปที่มุมบนขวา
+
+            c.lineTo(neckX, neckY); // วาดเส้นทแยงมุมจากมุมบนขวากลับมาที่จุด neck (ไขว้กลับมา)
+            // เชื่อมกลับไปจุด slope ด้านล่าง
+            c.lineTo(bottomX, y + h); 
+            // ---------------------------------------------------
+
+            c.lineTo(x, y + h); // วาดขอบล่างกลับไปที่มุมล่างซ้ายสุดของขอบที่ขยายแล้ว
+            c.closePath(); // ปิดเส้นกลับไปที่จุดเริ่มต้น
+
+            c.fillStyle = '#ffffff';
+            c.fill();
+            c.strokeStyle = color;
+            c.lineWidth = lineWidth || 4;
+            c.lineJoin = 'miter';
+            c.stroke();
+        }
+
+       */
+
+function drawValvePolyShape(c, obj) {
+            const {x, y, w, h, color, lineWidth} = obj;
+            const cy = y + h / 2;
+
+            // ความสูงของหัววาล์วด้านขวา (ลดลงให้แคบกว่าด้านซ้ายเหลือ 60% ของความสูงซ้าย)
+            const headH = h * 0.6; 
+            
+            // --- คงการคำนวณระยะขอบที่ขยายความยาวไว้เหมือนเดิม ---
+            const neckX_ref = x + w * 0.75; 
+            const dx = w * 0.25; 
+            const dy = headH / 2; 
+            const slopeX = dx / dy; 
+            const insetX = (h / 2) * slopeX; 
+            const origTopX = Math.max(x, neckX_ref - insetX);
+            
+            // ขอบบนและล่างที่ยาวขึ้น 1 เท่า (ยาวเป็น 2 เท่าของของเดิม)
+            const topX = x + ((origTopX - x) * 2);
+            const bottomX = x + ((origTopX - x) * 2); 
+
+            c.beginPath();
+            c.moveTo(x, y);            // เริ่มที่มุมบนซ้ายสุดของขอบ
+            c.lineTo(topX, y);         // วาดขอบบนตรงๆ มาจนถึงจุดหัก slope
+            
+            // ลากเส้นเฉียงเป็นเส้นตรงยาวเส้นเดียว จากขอบบ่าด้านบน ไปถึง ขอบหัววาล์วมุมขวาล่าง
+            c.lineTo(x + w, cy + headH / 2); 
+            
+            c.lineTo(x + w, cy - headH / 2); // วาดเส้นแนวตั้งของหัววาล์วด้านขวา (ลากขึ้น)
+
+            // ลากเส้นเฉียงไขว้กลับ เป็นเส้นตรงยาวเส้นเดียว จากขอบหัววาล์วมุมขวาบน กลับมาที่ขอบบ่าด้านล่าง
+            c.lineTo(bottomX, y + h); 
+            
+            c.lineTo(x, y + h);        // วาดขอบล่างกลับไปที่มุมล่างซ้ายสุด
+            c.closePath();             // ปิดเส้นกลับไปที่จุดเริ่มต้น (ลากแนวตั้งด้านซ้าย)
+
+            c.fillStyle = '#ffffff';
+            c.fill();
+            c.strokeStyle = color;
+            c.lineWidth = lineWidth || 4;
+            c.lineJoin = 'miter';
+            c.stroke();
+        }
 
         function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
 
@@ -707,7 +805,9 @@
             c.strokeStyle = obj.color; c.lineWidth = obj.lineWidth || 4; 
             setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
             
-            if (!isPreview) drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
+            if (!isPreview && !obj.pathType.includes('line')) {
+                drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
+            }
         }
 
         function drawFreehandArrow(c, obj, isPreview = false) {
@@ -741,7 +841,7 @@
             applyCamera(pCtx);
             
             let snapped = { p1, p2 };
-            if (currentTool !== 'curved-arrow-dashed') {
+            if (!currentTool.includes('curved')) {
                 snapped = calculateSnapPoints(p1, p2); 
             }
 
@@ -791,6 +891,8 @@
                     drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4);
                 } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
                     drawValveShape(ctx, obj);
+                } else if (obj.type === 'valve-poly') {
+                    drawValvePolyShape(ctx, obj);
                 } else if (obj.type === 'circle') {
                     ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = '#ffffff';
                     ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
@@ -1003,7 +1105,7 @@
                 const obj = sceneObjects[i];
                 if (obj.type === 'text') continue; 
 
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
                     if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y && wy <= obj.y + obj.h) {
                         return { index: i, object: obj };
                     }
@@ -1094,7 +1196,7 @@
                     
                     document.getElementById('btn-delete-selected').style.display = 'flex';
 
-                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
+                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
                         dragOffset.x = wx - selectedObject.x;
                         dragOffset.y = wy - selectedObject.y;
                     } else {
@@ -1139,7 +1241,7 @@
                         points: [arrowStartPoint]
                     };
                 }
-            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'oval', 'diamond', 'parallelogram'].includes(currentTool)) {
+            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'oval', 'diamond', 'parallelogram'].includes(currentTool)) {
                 let center = getAlignedCenter(wx, wy);
                 activeGuides = center.guides;
                 if (guideTimeout) clearTimeout(guideTimeout);
@@ -1159,6 +1261,8 @@
                     sceneObjects.push({ type: 'valve-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
                 } else if (currentTool === 'valve-v') {
                     sceneObjects.push({ type: 'valve-v', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
+                } else if (currentTool === 'valve-poly') {
+                    sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H }); 
                 } else if (currentTool === 'circle') {
                     sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle }); 
                 }
@@ -1202,7 +1306,7 @@
             const worldPos = getWorldPos(e.clientX, e.clientY);
 
             if (currentTool === 'select' && isDraggingObject && selectedObject) {
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
                     selectedObject.x = worldPos.x - dragOffset.x;
                     selectedObject.y = worldPos.y - dragOffset.y;
                 } else {
@@ -1315,7 +1419,7 @@
                     }
                 } else {
                     let snapped = { p1: arrowStartPoint, p2: worldPos };
-                    if (currentTool !== 'curved-arrow-dashed') {
+                    if (!currentTool.includes('curved')) {
                         snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
                     }
                     sceneObjects.push({ 
