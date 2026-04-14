@@ -73,7 +73,7 @@
                 <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ">🔤</button>
                 <div id="text-format-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ขนาดตัวอักษร">📏</label>
-                    <input type="number" id="text-size-input" min="10" max="150" value="24" oninput="setTextSize(this.value)">
+                    <input type="number" id="text-size-input" min="10" max="150" value="18" oninput="setTextSize(this.value)">
                     <button class="format-btn" onclick="toggleTextFormat('bold', this)" title="ตัวหนา"><b>B</b></button>
                     <button class="format-btn" style="font-family: serif;" onclick="toggleTextFormat('italic', this)" title="ตัวเอน"><i>I</i></button>
                     <button class="format-btn" onclick="toggleTextFormat('underline', this)" title="ขีดเส้นใต้"><u>U</u></button>
@@ -163,7 +163,7 @@
         let currentColor = '#000000';
         let currentBaseSize = 2;
         let currentCurvatureFactor = 50; 
-        let currentTextSize = 24;
+        let currentTextSize = 18;
         let isDoubleCircle = false; 
 
         let isTextBold = false;
@@ -223,7 +223,7 @@
 
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObject && currentTool === 'select') {
-                if (document.activeElement.tagName === 'INPUT') return; 
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; 
                 deleteSelected();
             }
         });
@@ -316,6 +316,9 @@
                 if(activeTextInput) {
                     activeTextInput.style.fontSize = (parsedValue * camera.scale) + 'px';
                     activeTextInput.setAttribute('data-size', parsedValue);
+                    
+                    activeTextInput.style.height = 'auto';
+                    activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
                 }
             }
         }
@@ -474,8 +477,13 @@
 
             if (obj.type === 'text') {
                 ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
-                const metrics = ctx.measureText(obj.isAllCaps ? obj.text.toUpperCase() : obj.text);
-                return { left: obj.x - metrics.width/2, right: obj.x + metrics.width/2, top: obj.y - obj.fontSize/2, bottom: obj.y + obj.fontSize/2 };
+                let lines = (obj.isAllCaps ? obj.text.toUpperCase() : obj.text).split('\n');
+                let maxWidth = 0;
+                lines.forEach(line => {
+                    maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+                });
+                let totalHeight = lines.length * (obj.fontSize * 1.2);
+                return { left: obj.x - maxWidth/2, right: obj.x + maxWidth/2, top: obj.y - totalHeight/2, bottom: obj.y + totalHeight/2 };
             } else if (obj.points) {
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                 obj.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
@@ -862,20 +870,27 @@
                     ctx.textBaseline = 'middle';
                     
                     let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text;
-                    ctx.fillText(drawText, obj.x, obj.y);
+                    let lines = drawText.split('\n');
+                    let lineHeight = obj.fontSize * 1.2;
+                    let startY = obj.y - ((lines.length - 1) * lineHeight) / 2;
 
-                    if (obj.isUnderline) {
-                        let metrics = ctx.measureText(drawText);
-                        let textWidth = metrics.width;
-                        let yOffset = obj.fontSize * 0.4;
-                        
-                        ctx.beginPath();
-                        ctx.strokeStyle = obj.color;
-                        ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
-                        ctx.moveTo(obj.x - textWidth / 2, obj.y + yOffset);
-                        ctx.lineTo(obj.x + textWidth / 2, obj.y + yOffset);
-                        ctx.stroke();
-                    }
+                    lines.forEach((line, index) => {
+                        let lineY = startY + (index * lineHeight);
+                        ctx.fillText(line, obj.x, lineY);
+
+                        if (obj.isUnderline) {
+                            let metrics = ctx.measureText(line);
+                            let textWidth = metrics.width;
+                            let yOffset = obj.fontSize * 0.4;
+                            
+                            ctx.beginPath();
+                            ctx.strokeStyle = obj.color;
+                            ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
+                            ctx.moveTo(obj.x - textWidth / 2, lineY + yOffset);
+                            ctx.lineTo(obj.x + textWidth / 2, lineY + yOffset);
+                            ctx.stroke();
+                        }
+                    });
                 }
             });
 
@@ -954,10 +969,14 @@
             setTool('text');
             const watermarkSize = 16;
             
-            activeTextInput = document.createElement('input');
-            activeTextInput.type = 'text';
+            activeTextInput = document.createElement('textarea');
             activeTextInput.value = watermarkText; 
             activeTextInput.className = 'movable-text-input';
+            activeTextInput.style.resize = 'none';
+            activeTextInput.style.overflow = 'hidden';
+            activeTextInput.style.whiteSpace = 'pre';
+            activeTextInput.style.lineHeight = '1.2';
+            activeTextInput.rows = 1;
             
             activeTextInput.style.left = clientX + 'px';
             activeTextInput.style.top = clientY + 'px';
@@ -974,7 +993,17 @@
             activeTextInput.setAttribute('data-size', watermarkSize);
 
             container.appendChild(activeTextInput);
-            setTimeout(() => activeTextInput.focus(), 50);
+
+            const autoResize = () => {
+                activeTextInput.style.height = 'auto';
+                activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
+            };
+            activeTextInput.addEventListener('input', autoResize);
+
+            setTimeout(() => {
+                activeTextInput.focus();
+                autoResize();
+            }, 50);
 
             activeTextInput.addEventListener('pointerdown', (e) => {
                 isDraggingText = true;
@@ -988,16 +1017,17 @@
                 finalizeTextInput();
                 setTool(previousTool);
             });
-            activeTextInput.addEventListener('keydown', (ev) => {
-                if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
-            });
         }
 
         function createTextInput(wx, wy, clientX, clientY) {
-            activeTextInput = document.createElement('input');
-            activeTextInput.type = 'text';
+            activeTextInput = document.createElement('textarea');
             activeTextInput.placeholder = 'พิมพ์...';
             activeTextInput.className = 'movable-text-input';
+            activeTextInput.style.resize = 'none';
+            activeTextInput.style.overflow = 'hidden';
+            activeTextInput.style.whiteSpace = 'pre';
+            activeTextInput.style.lineHeight = '1.2';
+            activeTextInput.rows = 1;
             
             activeTextInput.style.left = clientX + 'px';
             activeTextInput.style.top = clientY + 'px';
@@ -1014,7 +1044,17 @@
             activeTextInput.setAttribute('data-size', currentTextSize);
 
             container.appendChild(activeTextInput);
-            setTimeout(() => activeTextInput.focus(), 50);
+
+            const autoResize = () => {
+                activeTextInput.style.height = 'auto';
+                activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
+            };
+            activeTextInput.addEventListener('input', autoResize);
+
+            setTimeout(() => {
+                activeTextInput.focus();
+                autoResize();
+            }, 50);
 
             activeTextInput.addEventListener('pointerdown', (e) => {
                 isDraggingText = true;
@@ -1025,9 +1065,6 @@
             });
 
             activeTextInput.addEventListener('blur', finalizeTextInput);
-            activeTextInput.addEventListener('keydown', (ev) => {
-                if (ev.key === 'Enter') { ev.preventDefault(); activeTextInput.blur(); }
-            });
         }
 
         function getHitObject(wx, wy) {
@@ -1035,10 +1072,14 @@
                 const obj = sceneObjects[i];
                 if (obj.type === 'text') {
                     ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
-                    const metrics = ctx.measureText(obj.isAllCaps ? obj.text.toUpperCase() : obj.text);
-                    const w = metrics.width;
-                    const h = obj.fontSize;
-                    if (wx >= obj.x - w / 2 && wx <= obj.x + w / 2 && wy >= obj.y - h / 2 && wy <= obj.y + h / 2) {
+                    let lines = (obj.isAllCaps ? obj.text.toUpperCase() : obj.text).split('\n');
+                    let maxWidth = 0;
+                    lines.forEach(line => {
+                        maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+                    });
+                    let totalHeight = lines.length * (obj.fontSize * 1.2);
+                    
+                    if (wx >= obj.x - maxWidth / 2 && wx <= obj.x + maxWidth / 2 && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) {
                         return { index: i, object: obj };
                     }
                 }
