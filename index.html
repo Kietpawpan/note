@@ -74,6 +74,7 @@
                 <div id="text-format-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ขนาดตัวอักษร">📏</label>
                     <input type="number" id="text-size-input" min="10" max="150" value="18" oninput="setTextSize(this.value)">
+                    <button class="format-btn" onclick="toggleTextAlign(this)" title="จัดชิดซ้าย/กึ่งกลาง">L</button>
                     <button class="format-btn" onclick="toggleTextFormat('bold', this)" title="ตัวหนา"><b>B</b></button>
                     <button class="format-btn" style="font-family: serif;" onclick="toggleTextFormat('italic', this)" title="ตัวเอน"><i>I</i></button>
                     <button class="format-btn" onclick="toggleTextFormat('underline', this)" title="ขีดเส้นใต้"><u>U</u></button>
@@ -166,6 +167,7 @@
         let currentTextSize = 18;
         let isDoubleCircle = false; 
 
+        let textAlignMode = 'left'; 
         let isTextBold = false;
         let isTextItalic = false;
         let isTextUnderline = false;
@@ -197,6 +199,9 @@
 
         let activeGuides = [];
         let guideTimeout = null;
+        
+        let lastClickTime = 0;
+        let lastClickObj = null;
 
         const SHAPE = { 
             RECT_W: 160, RECT_H: 80, 
@@ -245,6 +250,14 @@
                 y: (screenY - rect.top - camera.y) / camera.scale
             };
         }
+        
+        function getScreenPos(worldX, worldY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: worldX * camera.scale + camera.x + rect.left,
+                y: worldY * camera.scale + camera.y + rect.top
+            };
+        }
 
         function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
@@ -283,6 +296,15 @@
             }
         }
 
+        function toggleTextAlign(btn) {
+            textAlignMode = textAlignMode === 'left' ? 'center' : 'left';
+            btn.innerHTML = textAlignMode === 'center' ? 'C' : 'L';
+            btn.classList.toggle('active', textAlignMode === 'center');
+            if (activeTextInput) {
+                activeTextInput.style.textAlign = textAlignMode;
+            }
+        }
+
         function toggleTextFormat(format, btn) {
             btn.classList.toggle('active');
             const isActive = btn.classList.contains('active');
@@ -298,11 +320,26 @@
                 activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
             }
         }
+        
+        function updateFormatButtonsUI() {
+            const btns = document.querySelectorAll('.format-btn');
+            btns.forEach(btn => {
+                const title = btn.getAttribute('title');
+                if (title === 'ตัวหนา') btn.classList.toggle('active', isTextBold);
+                if (title === 'ตัวเอน') btn.classList.toggle('active', isTextItalic);
+                if (title === 'ขีดเส้นใต้') btn.classList.toggle('active', isTextUnderline);
+                if (title === 'พิมพ์ใหญ่') btn.classList.toggle('active', isTextAllCaps);
+                if (title === 'จัดชิดซ้าย/กึ่งกลาง') {
+                    btn.innerHTML = textAlignMode === 'center' ? 'C' : 'L';
+                    btn.classList.toggle('active', textAlignMode === 'center');
+                }
+            });
+        }
 
         function setColor(color, btnElement) {
             currentColor = color;
             document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
-            btnElement.classList.add('active');
+            if(btnElement) btnElement.classList.add('active');
             if(activeTextInput) activeTextInput.style.color = currentColor;
             if(currentTool === 'eraser') setTool('pen');
         }
@@ -866,17 +903,30 @@
                     let fontStyle = obj.isItalic ? 'italic ' : '';
                     let fontWeight = obj.isBold ? 'bold ' : '';
                     ctx.font = `${fontStyle}${fontWeight}${obj.fontSize}px sans-serif`;
-                    ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     
                     let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text;
                     let lines = drawText.split('\n');
+                    
+                    let maxWidth = 0;
+                    lines.forEach(line => {
+                        maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+                    });
+
                     let lineHeight = obj.fontSize * 1.2;
                     let startY = obj.y - ((lines.length - 1) * lineHeight) / 2;
+                    
+                    let align = obj.align || 'left';
+                    ctx.textAlign = align;
+                    
+                    let drawX = obj.x;
+                    if (align === 'left') {
+                        drawX = obj.x - maxWidth / 2;
+                    }
 
                     lines.forEach((line, index) => {
                         let lineY = startY + (index * lineHeight);
-                        ctx.fillText(line, obj.x, lineY);
+                        ctx.fillText(line, drawX, lineY);
 
                         if (obj.isUnderline) {
                             let metrics = ctx.measureText(line);
@@ -886,8 +936,13 @@
                             ctx.beginPath();
                             ctx.strokeStyle = obj.color;
                             ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
-                            ctx.moveTo(obj.x - textWidth / 2, lineY + yOffset);
-                            ctx.lineTo(obj.x + textWidth / 2, lineY + yOffset);
+                            if (align === 'left') {
+                                ctx.moveTo(drawX, lineY + yOffset);
+                                ctx.lineTo(drawX + textWidth, lineY + yOffset);
+                            } else {
+                                ctx.moveTo(obj.x - textWidth / 2, lineY + yOffset);
+                                ctx.lineTo(obj.x + textWidth / 2, lineY + yOffset);
+                            }
                             ctx.stroke();
                         }
                     });
@@ -944,7 +999,8 @@
                         isBold: isTextBold,
                         isItalic: isTextItalic,
                         isUnderline: isTextUnderline,
-                        isAllCaps: isTextAllCaps
+                        isAllCaps: isTextAllCaps,
+                        align: textAlignMode
                     });
                     resetUndoCounter();
                     renderScene();
@@ -953,6 +1009,30 @@
                 activeTextInput = null;
                 isDraggingText = false;
             }
+        }
+        
+        function editExistingText(obj, index) {
+            sceneObjects.splice(index, 1);
+            selectedObject = null;
+            document.getElementById('btn-delete-selected').style.display = 'none';
+
+            setTool('text');
+            currentTextSize = obj.fontSize;
+            document.getElementById('text-size-input').value = currentTextSize;
+            currentColor = obj.color;
+            isTextBold = obj.isBold;
+            isTextItalic = obj.isItalic;
+            isTextUnderline = obj.isUnderline;
+            isTextAllCaps = obj.isAllCaps;
+            textAlignMode = obj.align || 'left';
+
+            updateFormatButtonsUI();
+            
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+
+            const screenPos = getScreenPos(obj.x, obj.y);
+            createTextInput(obj.x, obj.y, screenPos.x, screenPos.y, obj.text);
+            renderScene();
         }
 
         function createWatermark() {
@@ -987,6 +1067,7 @@
             activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
             activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
             activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
+            activeTextInput.style.textAlign = textAlignMode;
             
             activeTextInput.setAttribute('data-x', wPos.x);
             activeTextInput.setAttribute('data-y', wPos.y);
@@ -1019,7 +1100,7 @@
             });
         }
 
-        function createTextInput(wx, wy, clientX, clientY) {
+        function createTextInput(wx, wy, clientX, clientY, existingText = '') {
             activeTextInput = document.createElement('textarea');
             activeTextInput.placeholder = 'พิมพ์...';
             activeTextInput.className = 'movable-text-input';
@@ -1028,6 +1109,7 @@
             activeTextInput.style.whiteSpace = 'pre';
             activeTextInput.style.lineHeight = '1.2';
             activeTextInput.rows = 1;
+            activeTextInput.value = existingText;
             
             activeTextInput.style.left = clientX + 'px';
             activeTextInput.style.top = clientY + 'px';
@@ -1038,6 +1120,7 @@
             activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
             activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
             activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
+            activeTextInput.style.textAlign = textAlignMode;
             
             activeTextInput.setAttribute('data-x', wx);
             activeTextInput.setAttribute('data-y', wy);
@@ -1173,7 +1256,18 @@
 
             if (currentTool === 'select') {
                 const hit = getHitObject(wx, wy);
+                const now = Date.now();
+                
+                if (hit && hit.object.type === 'text' && (now - lastClickTime < 400) && lastClickObj === hit.object) {
+                    editExistingText(hit.object, hit.index);
+                    lastClickTime = 0;
+                    lastClickObj = null;
+                    return;
+                }
+
                 if (hit) {
+                    lastClickTime = now;
+                    lastClickObj = hit.object;
                     selectedObject = hit.object;
                     sceneObjects.splice(hit.index, 1);
                     sceneObjects.push(selectedObject);
@@ -1191,6 +1285,8 @@
                     }
                     isDraggingObject = true;
                 } else {
+                    lastClickTime = 0;
+                    lastClickObj = null;
                     selectedObject = null;
                     document.getElementById('btn-delete-selected').style.display = 'none';
                 }
