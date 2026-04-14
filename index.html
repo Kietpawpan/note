@@ -29,7 +29,7 @@
         
         .size-check { display: flex; align-items: center; gap: 3px; cursor: pointer; background: #f5f5f5; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .size-check:hover { background: #e0e0e0; }
-        .size-check input[type="radio"] { cursor: pointer; margin: 0; }
+        .size-check input[type="checkbox"], .size-check input[type="radio"] { cursor: pointer; margin: 0; }
 
         .shape-control-group { display: flex; align-items: center; gap: 5px; font-size: 12px; }
         #curvature-control { display: none; } 
@@ -133,6 +133,12 @@
         </div>
 
         <div class="tool-group">
+            <label class="size-check" title="เปิด/ปิด เทสีเทาอ่อนให้รูปทรง">
+                <input type="checkbox" id="fill-gray-check" onchange="toggleFillGray()"> 🪣 สีเทา
+            </label>
+        </div>
+
+        <div class="tool-group">
             <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
             
@@ -166,6 +172,7 @@
         let currentCurvatureFactor = 50; 
         let currentTextSize = 18;
         let isDoubleCircle = false; 
+        let isFillLightGray = false; 
 
         let textAlignMode = 'left'; 
         let isTextBold = false;
@@ -212,6 +219,14 @@
             DIAMOND_W: 160, DIAMOND_H: 100, 
             PARA_W: 160, PARA_H: 80
         };
+
+        function toggleFillGray() {
+            isFillLightGray = document.getElementById('fill-gray-check').checked;
+            if (selectedObject && ['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
+                selectedObject.fillColor = isFillLightGray ? '#e0e0e0' : '#ffffff';
+                renderScene();
+            }
+        }
 
         function deleteSelected() {
             if (selectedObject) {
@@ -709,13 +724,13 @@
             c.fillStyle = color; c.fill(); c.restore();
         }
 
-        function drawCloudShape(c, x, y, w, h, color, lineWidth = 4) {
+        function drawCloudShape(c, x, y, w, h, color, lineWidth = 4, fillColor = '#ffffff') {
             c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
             c.bezierCurveTo(x - w * 0.1, y + h * 0.8, x - w * 0.1, y + h * 0.3, x + w * 0.2, y + h * 0.3);
             c.bezierCurveTo(x + w * 0.2, y - h * 0.1, x + w * 0.7, y - h * 0.1, x + w * 0.7, y + h * 0.2);
             c.bezierCurveTo(x + w * 1.1, y + h * 0.2, x + w * 1.1, y + h * 0.8, x + w * 0.8, y + h * 0.8);
             c.closePath();
-            c.strokeStyle = color; c.lineWidth = lineWidth; c.fillStyle = '#ffffff'; c.fill(); c.stroke();
+            c.strokeStyle = color; c.lineWidth = lineWidth; c.fillStyle = fillColor; c.fill(); c.stroke();
         }
 
         function drawValveShape(c, obj) {
@@ -759,7 +774,7 @@
             c.lineTo(x, y + h);        
             c.closePath();             
 
-            c.fillStyle = '#ffffff';
+            c.fillStyle = obj.fillColor || '#ffffff';
             c.fill();
             c.strokeStyle = color;
             c.lineWidth = lineWidth || 4;
@@ -849,12 +864,12 @@
                     drawSmoothPath(ctx, obj);
                 } else if (obj.type === 'rect') {
                     ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
-                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'oval') {
                     ctx.beginPath();
                     ctx.ellipse(obj.x + obj.w/2, obj.y + obj.h/2, obj.w/2, obj.h/2, 0, 0, 2 * Math.PI);
-                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'diamond') {
                     ctx.beginPath();
@@ -863,7 +878,7 @@
                     ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h);
                     ctx.lineTo(obj.x, obj.y + obj.h/2);
                     ctx.closePath();
-                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'parallelogram') {
                     let offset = obj.w * 0.2;
@@ -873,16 +888,16 @@
                     ctx.lineTo(obj.x + obj.w - offset, obj.y + obj.h);
                     ctx.lineTo(obj.x, obj.y + obj.h);
                     ctx.closePath();
-                    ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'cloud') {
-                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4);
+                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4, obj.fillColor || '#ffffff');
                 } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
                     drawValveShape(ctx, obj);
                 } else if (obj.type === 'valve-poly') {
                     drawValvePolyShape(ctx, obj);
                 } else if (obj.type === 'circle') {
-                    ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = '#ffffff';
+                    ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = obj.fillColor || '#ffffff';
                     ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
                     if (obj.isDouble) { 
                         ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); 
@@ -1274,6 +1289,11 @@
                     
                     document.getElementById('btn-delete-selected').style.display = 'flex';
 
+                    if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
+                        document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
+                        isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
+                    }
+
                     if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(selectedObject.type)) {
                         dragOffset.x = wx - selectedObject.x;
                         dragOffset.y = wy - selectedObject.y;
@@ -1328,23 +1348,23 @@
                 guideTimeout = setTimeout(() => { activeGuides = []; renderScene(); }, 1000);
 
                 if (currentTool === 'rect') {
-                    sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H }); 
+                    sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'oval') {
-                    sceneObjects.push({ type: 'oval', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.OVAL_W/2, y: center.y - SHAPE.OVAL_H/2, w: SHAPE.OVAL_W, h: SHAPE.OVAL_H }); 
+                    sceneObjects.push({ type: 'oval', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.OVAL_W/2, y: center.y - SHAPE.OVAL_H/2, w: SHAPE.OVAL_W, h: SHAPE.OVAL_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'diamond') {
-                    sceneObjects.push({ type: 'diamond', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.DIAMOND_W/2, y: center.y - SHAPE.DIAMOND_H/2, w: SHAPE.DIAMOND_W, h: SHAPE.DIAMOND_H }); 
+                    sceneObjects.push({ type: 'diamond', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.DIAMOND_W/2, y: center.y - SHAPE.DIAMOND_H/2, w: SHAPE.DIAMOND_W, h: SHAPE.DIAMOND_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'parallelogram') {
-                    sceneObjects.push({ type: 'parallelogram', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.PARA_W/2, y: center.y - SHAPE.PARA_H/2, w: SHAPE.PARA_W, h: SHAPE.PARA_H }); 
+                    sceneObjects.push({ type: 'parallelogram', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.PARA_W/2, y: center.y - SHAPE.PARA_H/2, w: SHAPE.PARA_W, h: SHAPE.PARA_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'cloud') {
-                    sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H }); 
+                    sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'valve-h') {
                     sceneObjects.push({ type: 'valve-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
                 } else if (currentTool === 'valve-v') {
                     sceneObjects.push({ type: 'valve-v', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
                 } else if (currentTool === 'valve-poly') {
-                    sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H }); 
+                    sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'circle') {
-                    sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle }); 
+                    sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 }
                 resetUndoCounter();
                 renderScene();
