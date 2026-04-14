@@ -482,12 +482,14 @@
         }
 
         function importProject(event) {
-            const file = event.target.files[0];
+            const input = event.target;
+            const file = input.files[0];
             if (!file) return;
 
             if (activeTextInput) finalizeTextInput();
 
             const reader = new FileReader();
+            
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
@@ -500,14 +502,21 @@
                         resetUndoCounter();
                         renderScene();
                     } else {
-                        alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์สำหรับโปรเจกต์นี้');
+                        alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้');
                     }
                 } catch (err) {
-                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON');
+                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย');
+                } finally {
+                    input.value = ''; 
                 }
             };
+
+            reader.onerror = () => {
+                alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้');
+                input.value = '';
+            };
+
             reader.readAsText(file);
-            event.target.value = '';
         }
 
         function saveImage() {
