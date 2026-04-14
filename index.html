@@ -106,6 +106,8 @@
         <div class="tool-group">
             <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม">⤴️</button>
             <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⤵️</button>
+            <button id="btn-ra-arrow-s" class="tool-btn" onclick="setTool('rounded-angled-arrow-solid')" title="เส้นทึบหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰→</button>
+            <button id="btn-ra-arrow-d" class="tool-btn" onclick="setTool('rounded-angled-arrow-dashed')" title="เส้นประหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰⇢</button>
             <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)">🔀</button>
 
             <div style="display: flex; align-items: center; gap: 5px;">
@@ -223,7 +225,6 @@
             PARA_W: 160, PARA_H: 80
         };
 
-        // --- เพิ่มฟังก์ชัน Ray-Casting Algorithm สำหรับหาจุดศูนย์กลางที่อยู่ในเขตวงล้อม ---
         function isPointInPolygon(point, vs) {
             let x = point.x, y = point.y;
             let inside = false;
@@ -330,7 +331,7 @@
 
             currentTool = tool;
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c').replace(/line/g, 'l')}`;
+            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/rounded-angled/g, 'ra').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c').replace(/line/g, 'l')}`;
             const btn = document.getElementById(btnId);
             if(btn) btn.classList.add('active');
 
@@ -887,6 +888,46 @@
             }
         }
 
+        function drawRoundedOrthogonalArrow(c, obj, isPreview = false) {
+            if (!obj.points || obj.points.length < 2) return;
+
+            c.beginPath();
+            c.moveTo(obj.points[0].x, obj.points[0].y);
+
+            let maxRadius = 20;
+
+            if (obj.points.length > 2) {
+                for (let i = 1; i < obj.points.length - 1; i++) {
+                    let p0 = obj.points[i-1];
+                    let p1 = obj.points[i];
+                    let p2 = obj.points[i+1];
+                    
+                    let d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                    let d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                    let radius = Math.min(maxRadius, d1 / 2, d2 / 2);
+
+                    c.arcTo(p1.x, p1.y, p2.x, p2.y, radius);
+                }
+            }
+            c.lineTo(obj.points[obj.points.length - 1].x, obj.points[obj.points.length - 1].y);
+
+            c.strokeStyle = isPreview ? '#999' : obj.color;
+            c.lineWidth = obj.lineWidth || 4;
+            c.lineJoin = 'round';
+            c.lineCap = 'round';
+
+            setLineDash(c, obj.pathType.includes('dashed'));
+            c.stroke();
+            setLineDash(c, false);
+
+            if (!isPreview && !obj.pathType.includes('line')) {
+                let endPt = obj.points[obj.points.length - 1];
+                let prevPt = obj.points[obj.points.length - 2];
+                const angle = Math.atan2(endPt.y - prevPt.y, endPt.x - prevPt.x);
+                drawArrowhead(c, endPt.x, endPt.y, angle, obj.color, obj.lineWidth || 4);
+            }
+        }
+
         function drawPreviewArrow(p1, p2) {
             pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             applyCamera(pCtx);
@@ -953,7 +994,11 @@
                     ctx.stroke();
                 } else if (obj.type === 'arrow') {
                     if (obj.points) {
-                        drawFreehandArrow(ctx, obj, false);
+                        if (obj.pathType.includes('rounded-angled')) {
+                            drawRoundedOrthogonalArrow(ctx, obj, false);
+                        } else {
+                            drawFreehandArrow(ctx, obj, false);
+                        }
                     } else if (obj.p1 && obj.p2) {
                         if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
                     }
@@ -1032,7 +1077,6 @@
                 ctx.restore();
             }
 
-            // แสดงเส้นล้อมขณะกำลังลาก Lasso
             if (lassoPoints.length > 0) {
                 ctx.save();
                 ctx.beginPath();
@@ -1050,7 +1094,6 @@
                 ctx.restore();
             }
 
-            // วาดกรอบสี่เหลี่ยมคลุมวัตถุที่ถูกเลือก (ทั้งเดี่ยวและหลายชิ้น)
             if (currentTool === 'select') {
                 let toDrawBoxes = [];
                 if (selectedObject) toDrawBoxes.push(selectedObject);
@@ -1358,12 +1401,10 @@
                     lastClickObj = hit.object;
                     
                     if (multiSelectedObjects.includes(hit.object)) {
-                        // คลิกลงบนวัตถุที่อยู่ในกลุ่มเลือกหลายอัน เตรียมลากทั้งกลุ่ม
                         isDraggingObject = true;
                         dragStartPoint = { x: wx, y: wy };
                         multiSelectedObjects.forEach(o => snapshotOriginalPosition(o));
                     } else {
-                        // คลิกเลือกวัตถุเดียวใหม่
                         multiSelectedObjects = [];
                         selectedObject = hit.object;
                         sceneObjects.splice(hit.index, 1);
@@ -1381,7 +1422,6 @@
                         snapshotOriginalPosition(selectedObject);
                     }
                 } else {
-                    // คลิกที่ว่าง -> เริ่มการวาด Lasso
                     lastClickTime = 0;
                     lastClickObj = null;
                     selectedObject = null;
@@ -1565,7 +1605,11 @@
                     applyCamera(pCtx);
                     
                     let previewObj = { ...currentPath, points: orthogonalize(currentPath.points, 25) };
-                    drawFreehandArrow(pCtx, previewObj, true); 
+                    if (currentTool.includes('rounded-angled')) {
+                        drawRoundedOrthogonalArrow(pCtx, previewObj, true);
+                    } else {
+                        drawFreehandArrow(pCtx, previewObj, true); 
+                    }
                 } else {
                     drawPreviewArrow(arrowStartPoint, worldPos);
                 }
