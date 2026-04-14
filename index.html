@@ -6,8 +6,8 @@
     <title>System Dynamics</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; }
-        #board-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; height: 100dvh; width: 100vw; }
+        #board-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
         .canvas-layer { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
         #board { background-color: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); z-index: 1; }
         #preview-canvas { z-index: 2; pointer-events: none; } 
@@ -202,7 +202,7 @@
             RECT_W: 160, RECT_H: 80, 
             CLOUD_W: 70, CLOUD_H: 45, 
             VALVE_W: 60, VALVE_H: 40,
-            VALVE_POLY_W: 160, VALVE_POLY_H: 80, // ปรับความกว้างและสูงให้เท่ากับกล่องสี่เหลี่ยมผืนผ้า
+            VALVE_POLY_W: 160, VALVE_POLY_H: 80,
             OVAL_W: 128, OVAL_H: 64,  
             DIAMOND_W: 160, DIAMOND_H: 100, 
             PARA_W: 160, PARA_H: 80
@@ -239,16 +239,18 @@
         }
 
         function getWorldPos(screenX, screenY) {
+            const rect = canvas.getBoundingClientRect();
             return {
-                x: (screenX - camera.x) / camera.scale,
-                y: (screenY - camera.y) / camera.scale
+                x: (screenX - rect.left - camera.x) / camera.scale,
+                y: (screenY - rect.top - camera.y) / camera.scale
             };
         }
 
         function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
-            const w = window.innerWidth;
-            const h = window.innerHeight;
+            const rect = container.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
             
             [canvas, previewCanvas].forEach(c => {
                 c.width = w * dpr;
@@ -682,69 +684,13 @@
             }
             c.strokeStyle = obj.color; c.lineWidth = obj.lineWidth || 4; c.stroke();
         }
-/*
 
-function drawValvePolyShape(c, obj) {
+        function drawValvePolyShape(c, obj) {
             const {x, y, w, h, color, lineWidth} = obj;
             const cy = y + h / 2;
 
-            // กำหนดจุดคอด (Neck) ให้ค่อนไปทางขวา (75% ของความกว้าง)
-            const neckX = x + w * 0.8;
-            const neckY = cy;
-
-            // ความสูงของหัววาล์วด้านขวา (ลดลงให้แคบกว่าด้านซ้ายเหลือ 60% ของความสูงซ้าย)
             const headH = h * 0.6; 
             
-            // คำนวณความยาวของเส้นขอบด้านบนและล่างแบบเดิม
-            const dx = w * 0.25; 
-            const dy = headH / 2; 
-            const slopeX = dx / dy; 
-            
-            const insetX = (h / 2) * slopeX; 
-            const origTopX = Math.max(x, neckX - insetX);
-            
-            // ปรับเพิ่มความยาวเส้นขอบด้านบนและด้านล่างให้ยาวขึ้นอีก 1 เท่า (ยาวเป็น 2 เท่าของของเดิม)
-            // (คงค่าการคำนวณเดิมไว้เพื่อให้ขอบยังคงยาวขึ้นตามที่คุณต้องการ)
-            const topX = x + ((origTopX - x) * 2);
-            const bottomX = x + ((origTopX - x) * 2); 
-
-            c.beginPath();
-            c.moveTo(x, y); // เริ่มที่มุมบนซ้ายสุดของขอบที่ขยายแล้ว
-            c.lineTo(topX, y); // วาดขอบบนไปจนถึงจุด slope
-
-            // --- ส่วนที่ปรับปรุงเพื่อให้เส้นทแยงมุมไขว้กัน ---
-            c.lineTo(neckX, neckY); // วาดเส้นทแยงมุมจากขอบบนลงมาที่จุด neck
-            // เปลี่ยนจุดสิ้นสุด: จากเดิมเชื่อมไปมุมบนขวา เปลี่ยนเป็นเชื่อมไปมุมล่างขวา
-            c.lineTo(x + w, cy + headH / 2); 
-
-            c.lineTo(x + w, cy - headH / 2); // วาดขอบตั้งด้านขวาขึ้นไปที่มุมบนขวา
-
-            c.lineTo(neckX, neckY); // วาดเส้นทแยงมุมจากมุมบนขวากลับมาที่จุด neck (ไขว้กลับมา)
-            // เชื่อมกลับไปจุด slope ด้านล่าง
-            c.lineTo(bottomX, y + h); 
-            // ---------------------------------------------------
-
-            c.lineTo(x, y + h); // วาดขอบล่างกลับไปที่มุมล่างซ้ายสุดของขอบที่ขยายแล้ว
-            c.closePath(); // ปิดเส้นกลับไปที่จุดเริ่มต้น
-
-            c.fillStyle = '#ffffff';
-            c.fill();
-            c.strokeStyle = color;
-            c.lineWidth = lineWidth || 4;
-            c.lineJoin = 'miter';
-            c.stroke();
-        }
-
-       */
-
-function drawValvePolyShape(c, obj) {
-            const {x, y, w, h, color, lineWidth} = obj;
-            const cy = y + h / 2;
-
-            // ความสูงของหัววาล์วด้านขวา (ลดลงให้แคบกว่าด้านซ้ายเหลือ 60% ของความสูงซ้าย)
-            const headH = h * 0.6; 
-            
-            // --- คงการคำนวณระยะขอบที่ขยายความยาวไว้เหมือนเดิม ---
             const neckX_ref = x + w * 0.75; 
             const dx = w * 0.25; 
             const dy = headH / 2; 
@@ -752,24 +698,21 @@ function drawValvePolyShape(c, obj) {
             const insetX = (h / 2) * slopeX; 
             const origTopX = Math.max(x, neckX_ref - insetX);
             
-            // ขอบบนและล่างที่ยาวขึ้น 1 เท่า (ยาวเป็น 2 เท่าของของเดิม)
             const topX = x + ((origTopX - x) * 2);
             const bottomX = x + ((origTopX - x) * 2); 
 
             c.beginPath();
-            c.moveTo(x, y);            // เริ่มที่มุมบนซ้ายสุดของขอบ
-            c.lineTo(topX, y);         // วาดขอบบนตรงๆ มาจนถึงจุดหัก slope
+            c.moveTo(x, y);            
+            c.lineTo(topX, y);         
             
-            // ลากเส้นเฉียงเป็นเส้นตรงยาวเส้นเดียว จากขอบบ่าด้านบน ไปถึง ขอบหัววาล์วมุมขวาล่าง
             c.lineTo(x + w, cy + headH / 2); 
             
-            c.lineTo(x + w, cy - headH / 2); // วาดเส้นแนวตั้งของหัววาล์วด้านขวา (ลากขึ้น)
+            c.lineTo(x + w, cy - headH / 2); 
 
-            // ลากเส้นเฉียงไขว้กลับ เป็นเส้นตรงยาวเส้นเดียว จากขอบหัววาล์วมุมขวาบน กลับมาที่ขอบบ่าด้านล่าง
             c.lineTo(bottomX, y + h); 
             
-            c.lineTo(x, y + h);        // วาดขอบล่างกลับไปที่มุมล่างซ้ายสุด
-            c.closePath();             // ปิดเส้นกลับไปที่จุดเริ่มต้น (ลากแนวตั้งด้านซ้าย)
+            c.lineTo(x, y + h);        
+            c.closePath();             
 
             c.fillStyle = '#ffffff';
             c.fill();
@@ -1332,7 +1275,10 @@ function drawValvePolyShape(c, obj) {
                 const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) ? e.getCoalescedEvents() : [e];
                 for (let ev of events) {
                     const pos = getWorldPos(ev.clientX || e.clientX, ev.clientY || e.clientY);
-                    currentPath.points.push({ x: pos.x, y: pos.y });
+                    const lastPt = currentPath.points[currentPath.points.length - 1];
+                    if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) > 2) {
+                        currentPath.points.push({ x: pos.x, y: pos.y });
+                    }
                 }
                 
                 if (currentTool === 'pen') {
@@ -1347,7 +1293,10 @@ function drawValvePolyShape(c, obj) {
                             renderPath = { ...currentPath, points: [...currentPath.points] };
                             for (let ev of predicted) {
                                 const pos = getWorldPos(ev.clientX, ev.clientY);
-                                renderPath.points.push({ x: pos.x, y: pos.y });
+                                const lastPredPt = renderPath.points[renderPath.points.length - 1];
+                                if (!lastPredPt || Math.hypot(pos.x - lastPredPt.x, pos.y - lastPredPt.y) > 2) {
+                                    renderPath.points.push({ x: pos.x, y: pos.y });
+                                }
                             }
                         }
                     }
