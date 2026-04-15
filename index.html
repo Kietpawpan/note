@@ -113,9 +113,12 @@
             <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">)</button>
                 <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)">〰</button>
+                <button id="btn-short-l-h" class="tool-btn" onclick="setTool('short-line-h')" title="เส้นตรงแนวราบสั้น">➖</button>
+                <button id="btn-circle-arrow" class="tool-btn" onclick="setTool('circle-arrow-dashed')" title="ลูกศรประโคนวงกลม">⤏</button>
                 <div id="curvature-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
                     <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
+                    <input type="number" id="curvature-input" min="-150" max="150" value="50" oninput="setCurvature(this.value)" title="ระบุค่าความโค้ง" style="width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px; font-size: 12px; outline: none; margin-left: 3px;">
                 </div>
             </div>
             <button class="action-btn" onclick="undo()" title="ย้อนกลับการทำงานล่าสุด">↩️</button>
@@ -238,7 +241,7 @@
         }
 
         function snapshotOriginalPosition(obj) {
-            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
                 obj._origX = obj.x;
                 obj._origY = obj.y;
             } else {
@@ -255,7 +258,7 @@
 
         function toggleFillGray() {
             isFillLightGray = document.getElementById('fill-gray-check').checked;
-            if (selectedObject && ['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
+            if (selectedObject && ['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(selectedObject.type)) {
                 selectedObject.fillColor = isFillLightGray ? '#e0e0e0' : '#ffffff';
                 renderScene();
             }
@@ -331,11 +334,11 @@
 
             currentTool = tool;
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/rounded-angled/g, 'ra').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c').replace(/line/g, 'l')}`;
+            const btnId = `btn-${tool.replace(/-solid|-dashed/g, '').replace(/rounded-angled/g, 'ra').replace(/straight/g, 's').replace(/angled/g, 'a').replace(/curved/g, 'c').replace(/line/g, 'l').replace(/short-line-h/g, 'short-l-h').replace(/circle-arrow-dashed/g, 'circle-arrow')}`;
             const btn = document.getElementById(btnId);
             if(btn) btn.classList.add('active');
 
-            curvatureControl.style.display = currentTool.includes('curved') ? 'flex' : 'none';
+            curvatureControl.style.display = (currentTool.includes('curved') || currentTool === 'circle-arrow-dashed') ? 'flex' : 'none';
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
             textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
 
@@ -398,7 +401,14 @@
         }
 
         function setSize(size) { currentBaseSize = parseInt(size); }
-        function setCurvature(value) { currentCurvatureFactor = parseInt(value); } 
+        function setCurvature(value) { 
+            let val = parseInt(value);
+            if (isNaN(val)) return;
+            val = Math.max(-150, Math.min(150, val)); // ล็อกค่าให้อยู่ในช่วง -150 ถึง 150
+            currentCurvatureFactor = val; 
+            document.getElementById('curvature-slider').value = val;
+            document.getElementById('curvature-input').value = val;
+        } 
         function setTextSize(value) { 
             const parsedValue = parseInt(value);
             if (!isNaN(parsedValue) && parsedValue > 0) {
@@ -571,8 +581,9 @@
 
         function getShapeBox(obj) {
             let box = null;
-            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
-                box = { left: obj.x, right: obj.x + obj.w, top: obj.y, bottom: obj.y + obj.h, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+                let hPad = obj.type === 'short-line-h' ? 10 : 0;
+                box = { left: obj.x, right: obj.x + obj.w, top: obj.y - hPad, bottom: obj.y + obj.h + hPad, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
             } else if (obj.type === 'circle') {
                 box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
             }
@@ -870,6 +881,54 @@
                 drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
             }
         }
+        
+        function drawCircleTailArrow(c, obj, isPreview = false) {
+            const p1 = obj.p1, p2 = obj.p2;
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < 1) return;
+
+            // คำนวณความโค้งเหมือนลูกศรโค้งปกติ
+            let factor = obj.curvatureFactor !== undefined ? obj.curvatureFactor : 50;
+            let h = Math.max(1, Math.min(Math.abs(factor), d / 2));
+            const bowOutward = factor >= 0;
+            
+            const r = (d * d) / (8 * h) + (h / 2);
+            const k = r - h;
+            let nx = -dy / d, ny = dx / d;
+            if (!bowOutward) { nx = -nx; ny = -ny; }
+
+            const cx = (p1.x + p2.x) / 2 - k * nx;
+            const cy = (p1.y + p2.y) / 2 - k * ny;
+            const startAngle = Math.atan2(p1.y - cy, p1.x - cx);
+            const endAngle = Math.atan2(p2.y - cy, p2.x - cx);
+            const ccw = bowOutward ? true : false;
+
+            // ขนาดวงกลมใหม่ (เล็กลง)
+            const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; 
+
+            // 1. วาดเส้นประแบบโค้ง
+            c.beginPath(); 
+            c.arc(cx, cy, r, startAngle, endAngle, ccw);
+            c.strokeStyle = isPreview ? '#999' : obj.color; 
+            c.lineWidth = obj.lineWidth || 4; 
+            setLineDash(c, true); 
+            c.stroke(); 
+            setLineDash(c, false);
+
+            // 2. วาดโคนวงกลมเล็กทับจุดเริ่มต้น
+            c.beginPath();
+            c.arc(p1.x, p1.y, circleRadius, 0, Math.PI * 2);
+            c.fillStyle = obj.fillColor || '#ffffff';
+            c.fill();
+            c.stroke();
+
+            // 3. วาดหัวลูกศร
+            if (!isPreview) {
+                drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
+            }
+        }
+
 
         function drawFreehandArrow(c, obj, isPreview = false) {
             if (!obj.points || obj.points.length < 2) return;
@@ -942,12 +1001,16 @@
             applyCamera(pCtx);
             
             let snapped = { p1, p2 };
-            if (!currentTool.includes('curved')) {
+            if (!currentTool.includes('curved') && currentTool !== 'circle-arrow-dashed') {
                 snapped = calculateSnapPoints(p1, p2); 
             }
 
             const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor, lineWidth: currentBaseSize }; 
-            if (currentTool.includes('curved')) drawCurvedArrow(pCtx, obj, true);
+            if (currentTool.includes('curved')) {
+                drawCurvedArrow(pCtx, obj, true);
+            } else if (currentTool === 'circle-arrow-dashed') {
+                drawCircleTailArrow(pCtx, obj, true);
+            }
         }
 
         function renderScene() {
@@ -988,6 +1051,25 @@
                     ctx.closePath();
                     ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
                     ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                } else if (obj.type === 'short-line-h') {
+                    const midX = obj.x + obj.w / 2;
+                    const midY = obj.y;
+                    const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; // ขนาดเท่าโคนลูกศร
+
+                    // วาดเส้นขีด
+                    ctx.beginPath();
+                    ctx.moveTo(obj.x, obj.y);
+                    ctx.lineTo(obj.x + obj.w, obj.y);
+                    ctx.strokeStyle = obj.color; 
+                    ctx.lineWidth = obj.lineWidth || 4; 
+                    ctx.stroke();
+
+                    // วาดวงกลมเล็กตรงกลาง
+                    ctx.beginPath();
+                    ctx.arc(midX, midY, circleRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = obj.fillColor || '#ffffff';
+                    ctx.fill();
+                    ctx.stroke();
                 } else if (obj.type === 'cloud') {
                     drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4, obj.fillColor || '#ffffff');
                 } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
@@ -1009,7 +1091,11 @@
                             drawFreehandArrow(ctx, obj, false);
                         }
                     } else if (obj.p1 && obj.p2) {
-                        if (obj.pathType.includes('curved')) drawCurvedArrow(ctx, obj);
+                        if (obj.pathType.includes('curved')) {
+                            drawCurvedArrow(ctx, obj);
+                        } else if (obj.pathType === 'circle-arrow-dashed') {
+                            drawCircleTailArrow(ctx, obj);
+                        }
                     }
                 }
             });
@@ -1312,8 +1398,9 @@
                 const obj = sceneObjects[i];
                 if (obj.type === 'text') continue; 
 
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
-                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y && wy <= obj.y + obj.h) {
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+                    let hPad = obj.type === 'short-line-h' ? 15 : 0;
+                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) {
                         return { index: i, object: obj };
                     }
                 } else if (obj.type === 'circle') {
@@ -1459,19 +1546,7 @@
                     sceneObjects.push(currentPath);
                     resetUndoCounter();
                 }
-            } else if (currentTool.includes('arrow') || currentTool.includes('line')) {
-                isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
-                
-                if (currentTool.includes('angled')) {
-                    currentPath = {
-                        type: 'arrow',
-                        pathType: currentTool,
-                        color: currentColor,
-                        lineWidth: currentBaseSize, 
-                        points: [arrowStartPoint]
-                    };
-                }
-            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'oval', 'diamond', 'parallelogram'].includes(currentTool)) {
+            } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(currentTool)) {
                 let center = getAlignedCenter(wx, wy);
                 activeGuides = center.guides;
                 if (guideTimeout) clearTimeout(guideTimeout);
@@ -1495,9 +1570,23 @@
                     sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 } else if (currentTool === 'circle') {
                     sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                } else if (currentTool === 'short-line-h') {
+                    sceneObjects.push({ type: 'short-line-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - 30, y: center.y, w: 60, h: 0, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
                 }
                 resetUndoCounter();
                 renderScene();
+            } else if (currentTool.includes('arrow') || currentTool.includes('line')) {
+                isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
+                
+                if (currentTool.includes('angled')) {
+                    currentPath = {
+                        type: 'arrow',
+                        pathType: currentTool,
+                        color: currentColor,
+                        lineWidth: currentBaseSize, 
+                        points: [arrowStartPoint]
+                    };
+                }
             }
         });
 
@@ -1549,7 +1638,7 @@
                     let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
 
                     draggingList.forEach(obj => {
-                        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram'].includes(obj.type)) {
+                        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
                             obj.x = obj._origX + dx;
                             obj.y = obj._origY + dy;
                         } else {
@@ -1693,7 +1782,7 @@
                     }
                 } else {
                     let snapped = { p1: arrowStartPoint, p2: worldPos };
-                    if (!currentTool.includes('curved')) {
+                    if (!currentTool.includes('curved') && currentTool !== 'circle-arrow-dashed') {
                         snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
                     }
                     sceneObjects.push({ 
