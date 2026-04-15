@@ -114,6 +114,8 @@
             <button id="btn-ra-arrow-d" class="tool-btn" onclick="setTool('rounded-angled-arrow-dashed')" title="เส้นประหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰⇢</button>
             <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)"> #️⃣ </button>
 
+<button class="action-btn" onclick="toggleHandwritingGuides()" title="เปิด/ปิด เส้นบรรทัดคัดลายมือ">📝</button>
+
             <div style="display: flex; align-items: center; gap: 5px;">
 
                 <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)"> ╭╯ </button>
@@ -172,6 +174,14 @@
         const doubleEdgeCheck = document.getElementById('double-edge-check');
         const textFormatControl = document.getElementById('text-format-control');
         const textSizeInput = document.getElementById('text-size-input'); 
+
+let showHandwritingGuides = false;
+
+function toggleHandwritingGuides() {
+    showHandwritingGuides = !showHandwritingGuides;
+    renderScene();
+}
+
         
         let currentTool = 'pen';
         let currentColor = '#000000';
@@ -781,19 +791,31 @@
             c.globalCompositeOperation = 'source-over';
         }
 
-        function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
-            const size = 12 + (lineWidth * 1.2); 
-            const offset = lineWidth; 
+function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
+    // เพิ่มความยาวพื้นฐานขึ้นเล็กน้อยเพื่อให้ดูเพรียว (จาก 12 เป็น 14)
+    const size = 14 + (lineWidth * 1.5); 
+    const offset = lineWidth;
 
-            c.save(); c.translate(x, y); c.rotate(angle);
-            c.beginPath(); 
-            c.moveTo(offset, 0); 
-            c.lineTo(-size + offset, -size * 0.5); 
-            c.lineTo(-size * 0.8 + offset, 0); 
-            c.lineTo(-size + offset, size * 0.5); 
-            c.closePath();
-            c.fillStyle = color; c.fill(); c.restore();
-        }
+    c.save(); 
+    c.translate(x, y); 
+    c.rotate(angle);
+    c.beginPath(); 
+    
+    c.moveTo(offset, 0); // จุดปลายแหลม
+    // ปรับค่าแกน Y จาก 0.5 เป็น 0.35 เพื่อให้ปีกแคบลง
+    c.lineTo(-size + offset, -size * 0.30); 
+    // รอยหยักเว้าตรงกลางหัวลูกศร
+    c.lineTo(-size * 0.9 + offset, 0); 
+    // ปีกด้านล่าง
+    c.lineTo(-size + offset, size * 0.30); 
+    
+    c.closePath();
+    c.fillStyle = color; 
+    c.fill(); 
+    c.restore();
+}
+
+       
 
         function drawCloudShape(c, x, y, w, h, color, lineWidth = 4, fillColor = '#ffffff') {
             c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
@@ -1015,11 +1037,55 @@
             }
         }
 
+function drawHandwritingGuides(c) {
+    c.save();
+    const rect = canvas.getBoundingClientRect();
+    
+    // คำนวณขอบเขตการวาดให้ครอบคลุมมุมมองกล้องปัจจุบัน
+    const startX = (-camera.x - 2000) / camera.scale;
+    const endX = (rect.width + 2000 - camera.x) / camera.scale;
+    const startY = (-camera.y - 2000) / camera.scale;
+    const endY = (rect.height + 2000 - camera.y) / camera.scale;
+
+    const blockHeight = 120; // ระยะห่างของบรรทัดใหญ่แต่ละชุด
+    const lineSpacing = 20; // ระยะห่างระหว่างเส้นย่อยทั้ง 4 เส้น
+
+    const firstY = Math.floor(startY / blockHeight) * blockHeight;
+
+    c.lineWidth = 1 / camera.scale;
+
+    for (let y = firstY; y < endY; y += blockHeight) {
+        // เส้นบนสุด (Ascender line)
+        c.beginPath(); c.moveTo(startX, y); c.lineTo(endX, y);
+        c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
+
+        // เส้นประตรงกลาง (Mid line)
+        c.beginPath(); c.moveTo(startX, y + lineSpacing); c.lineTo(endX, y + lineSpacing);
+        c.strokeStyle = '#9999ff'; c.setLineDash([5 / camera.scale, 5 / camera.scale]); c.stroke();
+
+        // เส้นฐาน (Base line)
+        c.beginPath(); c.moveTo(startX, y + lineSpacing * 2); c.lineTo(endX, y + lineSpacing * 2);
+        c.strokeStyle = '#9999ff'; c.setLineDash([]); c.stroke();
+
+        // เส้นล่างสุด (Descender line)
+        c.beginPath(); c.moveTo(startX, y + lineSpacing * 3); c.lineTo(endX, y + lineSpacing * 3);
+        c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
+    }
+    c.restore();
+}
+
+
         function renderScene() {
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             applyCamera(ctx);
-            
+
+    
+    // --- แทรกโค้ด 3 บรรทัดนี้เพื่อวาดเส้นพื้นหลัง ---
+    if (showHandwritingGuides) {
+        drawHandwritingGuides(ctx);
+    }
+   
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') return; 
 
