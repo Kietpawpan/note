@@ -68,9 +68,9 @@
             <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (วงล้อมเพื่อเลือกหลายอันได้)">👆</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
-            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;">✍️</button>
+            <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;"> ✍🏻</button>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ">🔤</button>
+                <button id="btn-text" class="tool-btn" onclick="setTool('text')" title="พิมพ์ข้อความ"> 🔠 </button>
                 <div id="text-format-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ขนาดตัวอักษร">📏</label>
                     <input type="number" id="text-size-input" min="10" max="150" value="18" oninput="setTextSize(this.value)">
@@ -81,20 +81,22 @@
                     <button class="format-btn" style="font-size: 13px; font-weight: bold;" onclick="toggleTextFormat('caps', this)" title="พิมพ์ใหญ่">AA</button>
                 </div>
             </div>
-            <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')" title="ยางลบ">🧹</button>
+            <button id="btn-eraser" class="tool-btn" onclick="setTool('eraser')" title="ยางลบ"> 🧼 </button>
         </div>
         
         <div class="tool-group">
-            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม (Process)">🟩</button>
+            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม (Process)">▯</button>
             <button id="btn-oval" class="tool-btn" onclick="setTool('oval')" title="วงรี (Terminal)">⬭</button>
-            <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร (Decision)">💠</button>
+            <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร (Decision)">⃟</button>
             <button id="btn-parallelogram" class="tool-btn" onclick="setTool('parallelogram')" title="สี่เหลี่ยมขนมเปียกปูน (Input/Output)">▱</button>
-            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ">☁️</button>
-            <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⏳</button>
-            <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">⌛</button>
-            <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester">⋈</button>
-            <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม (Connector)">⭕</button>
+            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ"> ☁︎ </button>
+	    <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester">▽</button>
+            <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⋈</button>
+            <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">ⴵ</button>
+               <div style="display: flex; align-items: center; gap: 5px;">
+                <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม (Connector)"> 〇 </button>
+                <button id="btn-short-l-h" class="tool-btn" onclick="setTool('short-line-h')" title="เส้นตรงแนวราบสั้น"> __ </button>
+
                 <div id="double-edge-control" class="shape-control-group">
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 3px;" title="เปิดใช้งานวงกลมขอบคู่">
                         <input type="checkbox" id="double-edge-check" onchange="toggleDoubleEdge()"> ◎
@@ -104,18 +106,18 @@
         </div>
         
         <div class="tool-group">
-            <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม">⤴️</button>
-            <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⤵️</button>
-            <button id="btn-ra-arrow-s" class="tool-btn" onclick="setTool('rounded-angled-arrow-solid')" title="เส้นทึบหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰→</button>
+            <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม"> ↑ </button>
+            <button id="btn-circle-arrow" class="tool-btn" onclick="setTool('circle-arrow-dashed')" title="ลูกศรประโคนวงกลม">↬</button>
+            <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">⤿</button>
+            <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⇢</button>
+            <button id="btn-ra-arrow-s" class="tool-btn" onclick="setTool('rounded-angled-arrow-solid')" title="เส้นทึบหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">⤷</button>
             <button id="btn-ra-arrow-d" class="tool-btn" onclick="setTool('rounded-angled-arrow-dashed')" title="เส้นประหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰⇢</button>
-            <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)">🔀</button>
+            <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)">⌗</button>
 
             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง">)</button>
-                <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)">〰</button>
-                <button id="btn-short-l-h" class="tool-btn" onclick="setTool('short-line-h')" title="เส้นตรงแนวราบสั้น">➖</button>
-                <button id="btn-circle-arrow" class="tool-btn" onclick="setTool('circle-arrow-dashed')" title="ลูกศรประโคนวงกลม">⤏</button>
-                <div id="curvature-control" class="shape-control-group">
+
+                <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)"> ╭╯ </button>
+                  <div id="curvature-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
                     <input type="range" id="curvature-slider" min="-150" max="150" value="50" oninput="setCurvature(this.value)">
                     <input type="number" id="curvature-input" min="-150" max="150" value="50" oninput="setCurvature(this.value)" title="ระบุค่าความโค้ง" style="width: 45px; text-align: center; border: 1px solid #ccc; border-radius: 5px; padding: 2px; font-size: 12px; outline: none; margin-left: 3px;">
