@@ -68,23 +68,28 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             z-index: 200;
             font-family: sans-serif;
-            width: 250px;
+            width: 260px;
         }
         #property-panel h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .prop-row { margin-bottom: 10px; }
         .prop-row label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; font-weight: bold; }
-        .prop-row input { width: 100%; box-sizing: border-box; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
+        .prop-row input, .prop-row select { width: 100%; box-sizing: border-box; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
+        
+        /* Flex row for tight inputs */
+        .flex-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .flex-col { flex: 1; }
+        .flex-col label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; font-weight: bold; }
+
         .prop-actions { display: flex; justify-content: space-between; margin-top: 15px; }
         .prop-actions button { width: auto; height: auto; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
         #unit-result { margin-top: 10px; font-size: 12px; font-weight: bold; padding: 5px; border-radius: 4px; display: none; }
         .result-pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .result-fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         
-        /* สไตล์สำหรับปุ่มตัวแปรที่ชี้เข้ามา */
         .var-badge {
             background: #e3f2fd; border: 1px solid #00acc1; color: #006064; 
             border-radius: 12px; padding: 3px 8px; font-size: 11px; cursor: pointer; 
-            transition: 0.1s; display: inline-block; font-weight: bold;
+            transition: 0.1s; display: inline-block; font-weight: bold; margin-right: 4px; margin-bottom: 4px;
         }
         .var-badge:hover { background: #b2ebf2; transform: scale(1.05); }
     </style>
@@ -96,19 +101,48 @@
     </div>
 
     <div id="property-panel">
-        <h3>คุณสมบัติ (Property)</h3>
-        <div class="prop-row">
-            <label>ชื่อตัวแปร (Name)</label>
-            <input type="text" id="prop-name" placeholder="เช่น Population">
+        <h3>ตั้งค่าตัวแปร</h3>
+        
+        <div class="flex-row">
+            <div class="flex-col" style="flex: 1;">
+                <label>ชื่อย่อ (ใช้คำนวณ)</label>
+                <input type="text" id="prop-short-name" placeholder="เช่น P">
+            </div>
+            <div class="flex-col" style="flex: 0.5;">
+                <label>ลำดับที่</label>
+                <input type="text" id="prop-index" placeholder="เช่น 1">
+            </div>
         </div>
+
+        <div class="prop-row">
+            <label>ชื่อเต็ม (แสดงผล)</label>
+            <input type="text" id="prop-full-name" placeholder="เช่น Population">
+        </div>
+
+        <div class="prop-row" id="prop-text-pos-row" style="display: none;">
+            <label>ตำแหน่งข้อความ (เฉพาะขีด)</label>
+            <select id="prop-text-pos">
+                <option value="above">อยู่บนขีด (Above)</option>
+                <option value="below">อยู่ใต้ขีด (Below)</option>
+            </select>
+        </div>
+
+        <div class="prop-row" style="display: none;">
+            <label>จัดตัวอักษร</label>
+            <select id="prop-align">
+                <option value="center">กึ่งกลาง (Center)</option>
+                <option value="left">ชิดซ้าย (Left)</option>
+            </select>
+        </div>
+
         <div class="prop-row">
             <label>หน่วย (Unit)</label>
             <input type="text" id="prop-unit" placeholder="เช่น person, 1/year">
         </div>
         
         <div class="prop-row" id="incoming-vars-row" style="display:none; background: #f9f9f9; padding: 5px; border-radius: 4px;">
-            <label style="color: #007AFF;">🔗 ตัวแปรที่ชี้เข้ามา (คลิกเพื่อแทรก)</label>
-            <div id="incoming-vars-container" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px;"></div>
+            <label style="color: #007AFF;">🔗 นำเข้าจากลูกศร (คลิกเพื่อแทรก)</label>
+            <div id="incoming-vars-container" style="display: flex; flex-wrap: wrap; margin-top: 5px;"></div>
         </div>
 
         <div class="prop-row">
@@ -126,6 +160,7 @@
     <div id="toolbar">
         <div class="tool-group">
             <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (ดับเบิลคลิกรูปทรงเพื่อตั้งค่า/ตรวจหน่วย)">👆</button>
+            <button id="btn-equation" class="tool-btn" onclick="setTool('equation')" title="ตั้งค่าสมการ (เลือกเครื่องมือนี้แล้วแตะที่รูปทรง)" style="margin-left: 2px;">🧮</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
             <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;"> ✍🏻</button>
@@ -153,7 +188,7 @@
             <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester"> ⌛ </button>
             <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⋈</button>
             <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">ⴵ</button>
-               <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="display: flex; align-items: center; gap: 5px;">
                 <button id="btn-circle" class="tool-btn" onclick="setTool('circle')" title="วงกลม (Connector)"> ⭕ </button>
                 <button id="btn-short-l-h" class="tool-btn" onclick="setTool('short-line-h')" title="เส้นตรงแนวราบสั้น"> ➖ </button>
 
@@ -242,12 +277,18 @@
 
         let editingObject = null;
         const propPanel = document.getElementById('property-panel');
-        const propNameInput = document.getElementById('prop-name');
+        
+        const propShortNameInput = document.getElementById('prop-short-name');
+        const propFullNameInput = document.getElementById('prop-full-name');
+        const propIndexInput = document.getElementById('prop-index');
+        const propAlignInput = document.getElementById('prop-align');
+        const propTextPosInput = document.getElementById('prop-text-pos');
+        const propTextPosRow = document.getElementById('prop-text-pos-row');
+        
         const propUnitInput = document.getElementById('prop-unit');
         const propEquationInput = document.getElementById('prop-equation');
         const unitResult = document.getElementById('unit-result');
 
-        // ฟังก์ชันหาวัตถุ (Shape) ณ จุดใดๆ บนกระดาน
         function getShapeAtPoint(x, y, excludeObj = null) {
             for (let i = sceneObjects.length - 1; i >= 0; i--) {
                 const obj = sceneObjects[i];
@@ -255,7 +296,7 @@
                 
                 let box = getShapeBox(obj);
                 if (box) {
-                    const pad = 20; // ค่าเผื่อความคลาดเคลื่อนของการ Snap
+                    const pad = 20; 
                     if (x >= box.left - pad && x <= box.right + pad && y >= box.top - pad && y <= box.bottom + pad) {
                         return obj;
                     }
@@ -264,7 +305,7 @@
             return null;
         }
 
-        // ฟังก์ชันดึงตัวแปรจากลูกศรที่ชี้เข้ามาหา Target Object
+        // ดึงเฉพาะ "ชื่อย่อ" (varShortName) มาเป็น Smart Badges
         function getIncomingVariables(targetObj) {
             let incomingVars = [];
             let targetBox = getShapeBox(targetObj);
@@ -284,15 +325,14 @@
                     }
 
                     if (startPt && endPt) {
-                        // ตรวจสอบว่าจุดปลายลูกศร (endPt) อยู่ใกล้รูปทรงเป้าหมายหรือไม่
                         if (endPt.x >= targetBox.left - pad && endPt.x <= targetBox.right + pad &&
                             endPt.y >= targetBox.top - pad && endPt.y <= targetBox.bottom + pad) {
                             
-                            // หาว่าจุดเริ่มต้นลูกศร (startPt) วางอยู่บนรูปทรงอะไร
                             let sourceObj = getShapeAtPoint(startPt.x, startPt.y, targetObj);
-                            if (sourceObj && sourceObj.varName) {
-                                if (!incomingVars.includes(sourceObj.varName)) {
-                                    incomingVars.push(sourceObj.varName);
+                            if (sourceObj && (sourceObj.varShortName || sourceObj.varFullName)) {
+                                let vName = sourceObj.varShortName || sourceObj.varFullName;
+                                if (!incomingVars.includes(vName)) {
+                                    incomingVars.push(vName);
                                 }
                             }
                         }
@@ -304,16 +344,27 @@
 
         function openPropertyPanel(obj, screenX, screenY) {
             editingObject = obj;
-            propNameInput.value = obj.varName || '';
+            // โหลดข้อมูลเข้าฟอร์ม
+            propShortNameInput.value = obj.varShortName || '';
+            propFullNameInput.value = obj.varFullName || '';
+            propIndexInput.value = obj.varIndex || '';
+            propAlignInput.value = obj.varAlign || 'center';
+            
+            if (obj.type === 'short-line-h') {
+                propTextPosRow.style.display = 'block';
+                propTextPosInput.value = obj.varTextPos || 'above';
+            } else {
+                propTextPosRow.style.display = 'none';
+            }
+            
             propUnitInput.value = obj.varUnit || '';
             propEquationInput.value = obj.varEquation || '';
             unitResult.style.display = 'none';
 
-            // --- ส่วนแสดง Smart Badges ของตัวแปรที่ลิงก์เข้ามา ---
             const incomingVars = getIncomingVariables(obj);
             const incomingRow = document.getElementById('incoming-vars-row');
             const incomingContainer = document.getElementById('incoming-vars-container');
-            incomingContainer.innerHTML = ''; // ล้างของเก่า
+            incomingContainer.innerHTML = ''; 
             
             if (incomingVars.length > 0) {
                 incomingRow.style.display = 'block';
@@ -329,7 +380,6 @@
                         const text = input.value;
                         let insertText = v;
                         
-                        // เว้นวรรคอัตโนมัติให้สวยงาม
                         if (start > 0 && text[start-1] !== ' ' && text[start-1] !== '(') insertText = ' ' + insertText;
                         if (end < text.length && text[end] !== ' ' && text[end] !== ')') insertText = insertText + ' ';
                         
@@ -343,12 +393,11 @@
             } else {
                 incomingRow.style.display = 'none';
             }
-            // --------------------------------------------------
 
             let panelX = screenX + 20;
             let panelY = screenY + 20;
-            if (panelX + 250 > window.innerWidth) panelX = window.innerWidth - 270;
-            if (panelY + 250 > window.innerHeight) panelY = window.innerHeight - 270;
+            if (panelX + 260 > window.innerWidth) panelX = window.innerWidth - 280;
+            if (panelY + 350 > window.innerHeight) panelY = window.innerHeight - 380;
 
             propPanel.style.left = panelX + 'px';
             propPanel.style.top = panelY + 'px';
@@ -362,27 +411,42 @@
 
         function saveProperties() {
             if (editingObject) {
-                editingObject.varName = propNameInput.value.trim();
+                editingObject.varShortName = propShortNameInput.value.trim();
+                editingObject.varFullName = propFullNameInput.value.trim();
+                editingObject.varIndex = propIndexInput.value.trim();
+                editingObject.varAlign = propAlignInput.value;
+                if (editingObject.type === 'short-line-h') {
+                    editingObject.varTextPos = propTextPosInput.value;
+                }
+                
                 editingObject.varUnit = propUnitInput.value.trim();
                 editingObject.varEquation = propEquationInput.value.trim();
                 
-                if(editingObject.varName && editingObject.type !== 'text'){
+                let combinedTextLines = [];
+                if (editingObject.varShortName) combinedTextLines.push(editingObject.varShortName);
+                if (editingObject.varFullName) combinedTextLines.push(editingObject.varFullName);
+                if (editingObject.varIndex) combinedTextLines.push(editingObject.varIndex);
+                let combinedText = combinedTextLines.join('\n');
+                
+                if(combinedText && editingObject.type !== 'text'){
                     sceneObjects = sceneObjects.filter(o => !(o.type === 'text' && o.varLinked === editingObject));
                     
                     let box = getShapeBox(editingObject);
                     if(box){
                          sceneObjects.push({ 
                             type: 'text', 
-                            text: editingObject.varName, 
+                            text: combinedText, 
                             x: box.cx, 
                             y: box.cy, 
                             color: '#000', 
                             fontSize: 16,
                             isBold: true,
-                            align: 'center',
+                            align: editingObject.varAlign, 
                             varLinked: editingObject 
                         });
                     }
+                } else if (!combinedText) {
+                    sceneObjects = sceneObjects.filter(o => !(o.type === 'text' && o.varLinked === editingObject));
                 }
                 renderScene();
             }
@@ -392,34 +456,35 @@
         function checkUnitUI() {
             if (!editingObject) return;
             
-            const name = propNameInput.value.trim();
+            const nameToUse = propShortNameInput.value.trim() || propFullNameInput.value.trim();
             const lhsUnit = propUnitInput.value.trim();
             const rhsEquation = propEquationInput.value.trim();
 
             unitResult.style.display = 'block';
             unitResult.className = '';
 
-            if (!name || !lhsUnit || !rhsEquation) {
-                unitResult.innerText = "⚠️ กรุณากรอก ชื่อ หน่วย และสมการให้ครบ";
+            if (!nameToUse || !lhsUnit || !rhsEquation) {
+                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ(หรือชื่อเต็ม), หน่วย และสมการให้ครบ";
                 unitResult.classList.add('result-fail');
                 return;
             }
 
-            editingObject.varName = name;
+            editingObject.varShortName = propShortNameInput.value.trim();
             editingObject.varUnit = lhsUnit;
             editingObject.varEquation = rhsEquation;
 
             let modelData = {};
             sceneObjects.forEach(obj => {
-                if (obj.varName) {
-                    modelData[obj.varName] = { unit: obj.varUnit };
+                let vName = obj.varShortName || obj.varFullName;
+                if (vName) {
+                    modelData[vName] = { unit: obj.varUnit };
                 }
             });
 
             let parsedEquation = rhsEquation;
             
             for (const [varName, data] of Object.entries(modelData)) {
-                if (varName === name) continue; 
+                if (varName === nameToUse) continue; 
                 
                 const regex = new RegExp(`\\b${varName}\\b`, 'g');
                 if (parsedEquation.match(regex)) {
@@ -587,7 +652,7 @@ function toggleHandwritingGuides() {
 
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedObject || multiSelectedObjects.length > 0) && currentTool === 'select') {
-                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; 
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return; 
                 deleteSelected();
             }
         });
@@ -648,7 +713,7 @@ function toggleHandwritingGuides() {
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
             textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
 
-            if (tool !== 'select') {
+            if (tool !== 'select' && tool !== 'equation') {
                 selectedObject = null;
                 multiSelectedObjects = [];
                 isLassoing = false;
@@ -787,7 +852,7 @@ function toggleHandwritingGuides() {
             if (fileName.trim() === "") fileName = defaultName;
 
             const projectData = {
-                version: "1.1",
+                version: "1.2",
                 timestamp: new Date().toISOString(),
                 camera: camera,
                 objects: sceneObjects 
@@ -1446,22 +1511,76 @@ function drawHandwritingGuides(c) {
                 }
             });
 
+            // --- ส่วนของการวาด Text ---
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') {
-                    if (obj.varLinked) {
-                        let box = getShapeBox(obj.varLinked);
-                        if (box) {
-                            obj.x = box.cx;
-                            obj.y = box.cy;
-                        }
-                    }
-
                     ctx.fillStyle = obj.color;
                     let fontStyle = obj.isItalic ? 'italic ' : '';
                     let fontWeight = obj.isBold ? 'bold ' : '';
                     ctx.font = `${fontStyle}${fontWeight}${obj.fontSize}px sans-serif`;
                     ctx.textBaseline = 'middle';
-                    
+
+                    // 1. กรณีที่ Text ผูกติดอยู่กับรูปทรง
+                    if (obj.varLinked) {
+                        let parentShape = obj.varLinked;
+                        let box = getShapeBox(parentShape);
+                        
+                        if (box) {
+                            obj.x = box.cx;
+                            obj.y = box.cy;
+                            
+                            let linesToDraw = [];
+                            let lineHeight = obj.fontSize * 1.2;
+                            let startY = box.cy; 
+
+                            if (parentShape.type === 'circle' || parentShape.type === 'short-line-h') {
+                                // บังคับจัดกึ่งกลางสำหรับวงกลมและเส้นขีด
+                                let align = 'center';
+                                if (parentShape.varShortName) linesToDraw.push({ text: parentShape.varShortName, align: align, x: box.cx });
+                                if (parentShape.varFullName) linesToDraw.push({ text: parentShape.varFullName, align: align, x: box.cx });
+                                if (parentShape.varIndex) linesToDraw.push({ text: parentShape.varIndex, align: align, x: box.cx });
+                                
+                                startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
+
+                                // จัดตำแหน่ง บน/ล่าง สำหรับเส้นขีด
+                                if (parentShape.type === 'short-line-h') {
+                                    let totalHeight = linesToDraw.length * lineHeight;
+                                    let padY = 15;
+                                    if (parentShape.varTextPos === 'below') {
+                                        startY = box.cy + padY + lineHeight/2; 
+                                    } else { 
+                                        startY = box.cy - padY - totalHeight + lineHeight/2; 
+                                    }
+                                }
+                            } else {
+                                // จัดชิดซ้าย-ขวา สำหรับกล่องรูปแบบอื่นๆ
+                                let w = box.right - box.left;
+                                let padX = Math.max(10, w * 0.15); 
+                                let rightPadX = padX;
+                                
+                                // ปรับเฉพาะวาล์ว Forrester ให้บรรทัด 3 เขยิบเข้าอีก 25px
+                                if (parentShape.type === 'valve-poly') {
+                                    rightPadX = padX + 25; 
+                                }
+
+                                if (parentShape.varShortName) linesToDraw.push({ text: parentShape.varShortName, align: 'left', x: box.left + padX });
+                                if (parentShape.varFullName) linesToDraw.push({ text: parentShape.varFullName, align: 'left', x: box.left + padX });
+                                if (parentShape.varIndex) linesToDraw.push({ text: parentShape.varIndex, align: 'right', x: box.right - rightPadX });
+
+                                startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
+                            }
+
+                            linesToDraw.forEach((item, index) => {
+                                ctx.textAlign = item.align;
+                                let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
+                                let lineY = startY + (index * lineHeight);
+                                ctx.fillText(textStr, item.x, lineY);
+                            });
+                        }
+                        return; // จบการวาด text ที่ผูกกับรูปทรง
+                    }
+
+                    // 2. กรณี Text อิสระที่ผู้ใช้พิมพ์เองบนกระดาน
                     let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text;
                     let lines = drawText.split('\n');
                     
@@ -1476,12 +1595,14 @@ function drawHandwritingGuides(c) {
                     let align = obj.align || 'left';
                     ctx.textAlign = align;
                     
-                    let drawX = obj.x;
-                    if (align === 'left') {
-                        drawX = obj.x - maxWidth / 2;
-                    }
-
                     lines.forEach((line, index) => {
+                        let drawX = obj.x;
+                        if (align === 'left') {
+                            drawX = obj.x - maxWidth / 2;
+                        } else if (align === 'right') { 
+                            drawX = obj.x + maxWidth / 2;
+                        }
+                        
                         let lineY = startY + (index * lineHeight);
                         ctx.fillText(line, drawX, lineY);
 
@@ -1744,7 +1865,11 @@ function drawHandwritingGuides(c) {
                     });
                     let totalHeight = lines.length * (obj.fontSize * 1.2);
                     
-                    if (wx >= obj.x - maxWidth / 2 && wx <= obj.x + maxWidth / 2 && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) {
+                    let align = obj.align || 'left';
+                    let textLeft = obj.x;
+                    if (align === 'left' || align === 'center') { textLeft = obj.x - maxWidth / 2; }
+                    
+                    if (wx >= textLeft && wx <= textLeft + maxWidth && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) {
                         return { index: i, object: obj };
                     }
                 }
@@ -1847,7 +1972,18 @@ function drawHandwritingGuides(c) {
             
             if (activeTextInput && !isDraggingText) {
                 finalizeTextInput();
-                if (currentTool !== 'text' && currentTool !== 'select') return; 
+                if (currentTool !== 'text' && currentTool !== 'select' && currentTool !== 'equation') return; 
+            }
+
+            if (currentTool === 'equation') {
+                const hit = getHitObject(wx, wy);
+                if (hit) {
+                    const type = hit.object.type;
+                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(type)) {
+                        openPropertyPanel(hit.object, e.clientX, e.clientY);
+                    }
+                }
+                return;
             }
 
             if (currentTool === 'select') {
