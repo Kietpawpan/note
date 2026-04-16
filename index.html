@@ -70,28 +70,64 @@
             font-family: sans-serif;
             width: 260px;
         }
-        #property-panel h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .prop-row { margin-bottom: 10px; }
-        .prop-row label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; font-weight: bold; }
-        .prop-row input, .prop-row select { width: 100%; box-sizing: border-box; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
+
+/* UI สำหรับ Property Panel */
+        #property-panel {
+            display: none;
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+            z-index: 200;
+            font-family: sans-serif;
+            width: 320px; /* ขยายความกว้างกล่องรับฟอนต์ใหญ่ */
+        }
+        #property-panel h3 { margin: 0 0 12px 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333; }
+        .prop-row { margin-bottom: 12px; }
+        .prop-row label { display: block; font-size: 14px; color: #444; margin-bottom: 5px; font-weight: bold; }
+        
+        /* บังคับขนาดฟอนต์ 16px ป้องกัน iPad ซูมหน้าจออัตโนมัติ */
+        .prop-row input, .prop-row select { 
+            width: 100%; 
+            box-sizing: border-box; 
+            padding: 8px; 
+            border: 1px solid #ccc; 
+            border-radius: 6px; 
+            font-family: monospace; 
+            font-size: 16px; 
+        }
         
         /* Flex row for tight inputs */
-        .flex-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .flex-row { display: flex; gap: 12px; margin-bottom: 12px; }
         .flex-col { flex: 1; }
-        .flex-col label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; font-weight: bold; }
+        .flex-col label { display: block; font-size: 14px; color: #444; margin-bottom: 5px; font-weight: bold; }
+        .flex-col input { 
+            width: 100%; 
+            box-sizing: border-box; 
+            padding: 8px; 
+            border: 1px solid #ccc; 
+            border-radius: 6px; 
+            font-family: monospace; 
+            font-size: 16px; 
+        }
 
-        .prop-actions { display: flex; justify-content: space-between; margin-top: 15px; }
-        .prop-actions button { width: auto; height: auto; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
-        #unit-result { margin-top: 10px; font-size: 12px; font-weight: bold; padding: 5px; border-radius: 4px; display: none; }
+        .prop-actions { display: flex; justify-content: space-between; margin-top: 18px; }
+        .prop-actions button { width: auto; height: auto; padding: 8px 14px; border-radius: 6px; font-size: 14px; font-weight: bold; }
+        
+        #unit-result { margin-top: 12px; font-size: 14px; font-weight: bold; padding: 8px; border-radius: 6px; display: none; line-height: 1.4; }
         .result-pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .result-fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         
+        /* ปรับปุ่มแทรกตัวแปรให้กดง่ายขึ้น */
         .var-badge {
             background: #e3f2fd; border: 1px solid #00acc1; color: #006064; 
-            border-radius: 12px; padding: 3px 8px; font-size: 11px; cursor: pointer; 
-            transition: 0.1s; display: inline-block; font-weight: bold; margin-right: 4px; margin-bottom: 4px;
+            border-radius: 12px; padding: 5px 10px; font-size: 13px; cursor: pointer; 
+            transition: 0.1s; display: inline-block; font-weight: bold; margin-right: 5px; margin-bottom: 5px;
         }
         .var-badge:hover { background: #b2ebf2; transform: scale(1.05); }
+
     </style>
 </head>
 <body>
