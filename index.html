@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>System Dynamics</title>
+    <title>System Dynamics & Unit Checker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
     <link rel="manifest" href="manifest.json">
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; height: 100dvh; width: 100vw; }
@@ -55,6 +56,37 @@
             cursor: move;
             touch-action: none;
         }
+
+        /* UI สำหรับ Property Panel */
+        #property-panel {
+            display: none;
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 200;
+            font-family: sans-serif;
+            width: 250px;
+        }
+        #property-panel h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .prop-row { margin-bottom: 10px; }
+        .prop-row label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; font-weight: bold; }
+        .prop-row input { width: 100%; box-sizing: border-box; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
+        .prop-actions { display: flex; justify-content: space-between; margin-top: 15px; }
+        .prop-actions button { width: auto; height: auto; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        #unit-result { margin-top: 10px; font-size: 12px; font-weight: bold; padding: 5px; border-radius: 4px; display: none; }
+        .result-pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .result-fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        
+        /* สไตล์สำหรับปุ่มตัวแปรที่ชี้เข้ามา */
+        .var-badge {
+            background: #e3f2fd; border: 1px solid #00acc1; color: #006064; 
+            border-radius: 12px; padding: 3px 8px; font-size: 11px; cursor: pointer; 
+            transition: 0.1s; display: inline-block; font-weight: bold;
+        }
+        .var-badge:hover { background: #b2ebf2; transform: scale(1.05); }
     </style>
 </head>
 <body>
@@ -63,9 +95,37 @@
         <canvas id="preview-canvas" class="canvas-layer"></canvas> 
     </div>
 
+    <div id="property-panel">
+        <h3>คุณสมบัติ (Property)</h3>
+        <div class="prop-row">
+            <label>ชื่อตัวแปร (Name)</label>
+            <input type="text" id="prop-name" placeholder="เช่น Population">
+        </div>
+        <div class="prop-row">
+            <label>หน่วย (Unit)</label>
+            <input type="text" id="prop-unit" placeholder="เช่น person, 1/year">
+        </div>
+        
+        <div class="prop-row" id="incoming-vars-row" style="display:none; background: #f9f9f9; padding: 5px; border-radius: 4px;">
+            <label style="color: #007AFF;">🔗 ตัวแปรที่ชี้เข้ามา (คลิกเพื่อแทรก)</label>
+            <div id="incoming-vars-container" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px;"></div>
+        </div>
+
+        <div class="prop-row">
+            <label>สมการ (Equation)</label>
+            <input type="text" id="prop-equation" placeholder="เช่น 100 หรือ Pop * Rate">
+        </div>
+        <div id="unit-result"></div>
+        <div class="prop-actions">
+            <button class="action-btn" onclick="checkUnitUI()" title="ตรวจสอบความสอดคล้องของหน่วย">Check Units</button>
+            <button class="active" onclick="saveProperties()">Save</button>
+            <button class="danger" onclick="closePropertyPanel()">Close</button>
+        </div>
+    </div>
+
     <div id="toolbar">
         <div class="tool-group">
-            <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (วงล้อมเพื่อเลือกหลายอันได้)">👆</button>
+            <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (ดับเบิลคลิกรูปทรงเพื่อตั้งค่า/ตรวจหน่วย)">👆</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
             <button id="btn-pen" class="active tool-btn" onclick="setTool('pen')" title="เส้นอิสระ" style="margin-left: 5px;"> ✍🏻</button>
@@ -164,6 +224,235 @@
     <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importProject(event)">
 
     <script>
+        // ==========================================
+        // ส่วนการจัดการ Unit Check และ Data Model
+        // ==========================================
+        
+        try {
+            math.createUnit('person', { aliases: ['people', 'persons', 'man', 'men'] });
+            math.createUnit('item', { aliases: ['items', 'piece', 'pieces', 'unit', 'units'] });
+            math.createUnit('baht', { aliases: ['thb'] });
+            math.createUnit('mcg', '1 ug');
+            math.createUnit('ton', '1000 kg'); 
+            math.createUnit('tons', '1000 kg');
+            math.createUnit('rai', '1600 m^2');
+            math.createUnit('ngan', '400 m^2');
+            math.createUnit('sqwah', '4 m^2');
+        } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
+
+        let editingObject = null;
+        const propPanel = document.getElementById('property-panel');
+        const propNameInput = document.getElementById('prop-name');
+        const propUnitInput = document.getElementById('prop-unit');
+        const propEquationInput = document.getElementById('prop-equation');
+        const unitResult = document.getElementById('unit-result');
+
+        // ฟังก์ชันหาวัตถุ (Shape) ณ จุดใดๆ บนกระดาน
+        function getShapeAtPoint(x, y, excludeObj = null) {
+            for (let i = sceneObjects.length - 1; i >= 0; i--) {
+                const obj = sceneObjects[i];
+                if (obj === excludeObj) continue;
+                
+                let box = getShapeBox(obj);
+                if (box) {
+                    const pad = 20; // ค่าเผื่อความคลาดเคลื่อนของการ Snap
+                    if (x >= box.left - pad && x <= box.right + pad && y >= box.top - pad && y <= box.bottom + pad) {
+                        return obj;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // ฟังก์ชันดึงตัวแปรจากลูกศรที่ชี้เข้ามาหา Target Object
+        function getIncomingVariables(targetObj) {
+            let incomingVars = [];
+            let targetBox = getShapeBox(targetObj);
+            if (!targetBox) return incomingVars;
+
+            const pad = 25; 
+
+            sceneObjects.forEach(obj => {
+                if (obj.type === 'arrow') { 
+                    let startPt = null, endPt = null;
+                    if (obj.points && obj.points.length >= 2) {
+                        startPt = obj.points[0];
+                        endPt = obj.points[obj.points.length - 1];
+                    } else if (obj.p1 && obj.p2) {
+                        startPt = obj.p1;
+                        endPt = obj.p2;
+                    }
+
+                    if (startPt && endPt) {
+                        // ตรวจสอบว่าจุดปลายลูกศร (endPt) อยู่ใกล้รูปทรงเป้าหมายหรือไม่
+                        if (endPt.x >= targetBox.left - pad && endPt.x <= targetBox.right + pad &&
+                            endPt.y >= targetBox.top - pad && endPt.y <= targetBox.bottom + pad) {
+                            
+                            // หาว่าจุดเริ่มต้นลูกศร (startPt) วางอยู่บนรูปทรงอะไร
+                            let sourceObj = getShapeAtPoint(startPt.x, startPt.y, targetObj);
+                            if (sourceObj && sourceObj.varName) {
+                                if (!incomingVars.includes(sourceObj.varName)) {
+                                    incomingVars.push(sourceObj.varName);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            return incomingVars;
+        }
+
+        function openPropertyPanel(obj, screenX, screenY) {
+            editingObject = obj;
+            propNameInput.value = obj.varName || '';
+            propUnitInput.value = obj.varUnit || '';
+            propEquationInput.value = obj.varEquation || '';
+            unitResult.style.display = 'none';
+
+            // --- ส่วนแสดง Smart Badges ของตัวแปรที่ลิงก์เข้ามา ---
+            const incomingVars = getIncomingVariables(obj);
+            const incomingRow = document.getElementById('incoming-vars-row');
+            const incomingContainer = document.getElementById('incoming-vars-container');
+            incomingContainer.innerHTML = ''; // ล้างของเก่า
+            
+            if (incomingVars.length > 0) {
+                incomingRow.style.display = 'block';
+                incomingVars.forEach(v => {
+                    let btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.innerText = `+ ${v}`;
+                    btn.className = 'var-badge';
+                    btn.onclick = () => {
+                        const input = propEquationInput;
+                        const start = input.selectionStart;
+                        const end = input.selectionEnd;
+                        const text = input.value;
+                        let insertText = v;
+                        
+                        // เว้นวรรคอัตโนมัติให้สวยงาม
+                        if (start > 0 && text[start-1] !== ' ' && text[start-1] !== '(') insertText = ' ' + insertText;
+                        if (end < text.length && text[end] !== ' ' && text[end] !== ')') insertText = insertText + ' ';
+                        
+                        input.value = text.slice(0, start) + insertText + text.slice(end);
+                        input.focus();
+                        const newPos = start + insertText.length;
+                        input.setSelectionRange(newPos, newPos);
+                    };
+                    incomingContainer.appendChild(btn);
+                });
+            } else {
+                incomingRow.style.display = 'none';
+            }
+            // --------------------------------------------------
+
+            let panelX = screenX + 20;
+            let panelY = screenY + 20;
+            if (panelX + 250 > window.innerWidth) panelX = window.innerWidth - 270;
+            if (panelY + 250 > window.innerHeight) panelY = window.innerHeight - 270;
+
+            propPanel.style.left = panelX + 'px';
+            propPanel.style.top = panelY + 'px';
+            propPanel.style.display = 'block';
+        }
+
+        function closePropertyPanel() {
+            propPanel.style.display = 'none';
+            editingObject = null;
+        }
+
+        function saveProperties() {
+            if (editingObject) {
+                editingObject.varName = propNameInput.value.trim();
+                editingObject.varUnit = propUnitInput.value.trim();
+                editingObject.varEquation = propEquationInput.value.trim();
+                
+                if(editingObject.varName && editingObject.type !== 'text'){
+                    sceneObjects = sceneObjects.filter(o => !(o.type === 'text' && o.varLinked === editingObject));
+                    
+                    let box = getShapeBox(editingObject);
+                    if(box){
+                         sceneObjects.push({ 
+                            type: 'text', 
+                            text: editingObject.varName, 
+                            x: box.cx, 
+                            y: box.cy, 
+                            color: '#000', 
+                            fontSize: 16,
+                            isBold: true,
+                            align: 'center',
+                            varLinked: editingObject 
+                        });
+                    }
+                }
+                renderScene();
+            }
+            closePropertyPanel();
+        }
+
+        function checkUnitUI() {
+            if (!editingObject) return;
+            
+            const name = propNameInput.value.trim();
+            const lhsUnit = propUnitInput.value.trim();
+            const rhsEquation = propEquationInput.value.trim();
+
+            unitResult.style.display = 'block';
+            unitResult.className = '';
+
+            if (!name || !lhsUnit || !rhsEquation) {
+                unitResult.innerText = "⚠️ กรุณากรอก ชื่อ หน่วย และสมการให้ครบ";
+                unitResult.classList.add('result-fail');
+                return;
+            }
+
+            editingObject.varName = name;
+            editingObject.varUnit = lhsUnit;
+            editingObject.varEquation = rhsEquation;
+
+            let modelData = {};
+            sceneObjects.forEach(obj => {
+                if (obj.varName) {
+                    modelData[obj.varName] = { unit: obj.varUnit };
+                }
+            });
+
+            let parsedEquation = rhsEquation;
+            
+            for (const [varName, data] of Object.entries(modelData)) {
+                if (varName === name) continue; 
+                
+                const regex = new RegExp(`\\b${varName}\\b`, 'g');
+                if (parsedEquation.match(regex)) {
+                    const unitString = data.unit ? `(1 * (${data.unit}))` : "(1)";
+                    parsedEquation = parsedEquation.replace(regex, unitString);
+                }
+            }
+
+            try {
+                const rhsResult = math.evaluate(parsedEquation);
+                const rhsUnitParsed = rhsResult.to(lhsUnit); 
+
+                const lhsDim = math.unit(lhsUnit).dimensions;
+                const rhsDim = rhsResult.type === 'Unit' ? rhsResult.dimensions : null;
+
+                if (JSON.stringify(lhsDim) === JSON.stringify(rhsDim)) {
+                    unitResult.innerText = `✅ ผ่าน! หน่วยสอดคล้องกัน [ ${lhsUnit} ]`;
+                    unitResult.classList.add('result-pass');
+                } else {
+                    unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsResult.formatUnits()} ] แต่ซ้ายตั้งไว้ [ ${lhsUnit} ]`;
+                    unitResult.classList.add('result-fail');
+                }
+
+            } catch (error) {
+                unitResult.innerText = `⚠️ ขวา: [ ${error.message} ]`;
+                unitResult.classList.add('result-fail');
+            }
+        }
+
+
+        // ==========================================
+        // ส่วนจัดการ Canvas เดิม
+        // ==========================================
         const canvas = document.getElementById('board');
         const ctx = canvas.getContext('2d', { desynchronized: true });
         const previewCanvas = document.getElementById('preview-canvas');
@@ -220,7 +509,7 @@ function toggleHandwritingGuides() {
         let activeTouchPointers = new Map();
         let isPanning = false;
         let startPan = { x: 0, y: 0 };
-        let startCam = { x: 0, y: 0 };
+        let startCam = { x: camera.x, y: camera.y };
         let initialPinchDist = 0;
         let initialScale = 1;
         let pinchCenter = { x: 0, y: 0 };
@@ -279,16 +568,20 @@ function toggleHandwritingGuides() {
 
         function deleteSelected() {
             if (multiSelectedObjects.length > 0) {
-                sceneObjects = sceneObjects.filter(obj => !multiSelectedObjects.includes(obj));
+                let linkedTexts = sceneObjects.filter(o => o.type === 'text' && multiSelectedObjects.includes(o.varLinked));
+                let toDelete = [...multiSelectedObjects, ...linkedTexts];
+                sceneObjects = sceneObjects.filter(obj => !toDelete.includes(obj));
             } else if (selectedObject) {
-                const index = sceneObjects.indexOf(selectedObject);
-                if (index > -1) sceneObjects.splice(index, 1);
+                let linkedTexts = sceneObjects.filter(o => o.type === 'text' && o.varLinked === selectedObject);
+                let toDelete = [selectedObject, ...linkedTexts];
+                sceneObjects = sceneObjects.filter(obj => !toDelete.includes(obj));
             }
             
             selectedObject = null;
             multiSelectedObjects = [];
             document.getElementById('btn-delete-selected').style.display = 'none';
             resetUndoCounter();
+            closePropertyPanel();
             renderScene();
         }
 
@@ -361,6 +654,7 @@ function toggleHandwritingGuides() {
                 isLassoing = false;
                 lassoPoints = [];
                 document.getElementById('btn-delete-selected').style.display = 'none';
+                closePropertyPanel();
                 renderScene();
             }
         }
@@ -417,7 +711,7 @@ function toggleHandwritingGuides() {
         function setCurvature(value) { 
             let val = parseInt(value);
             if (isNaN(val)) return;
-            val = Math.max(-150, Math.min(150, val)); // ล็อกค่าให้อยู่ในช่วง -150 ถึง 150
+            val = Math.max(-150, Math.min(150, val)); 
             currentCurvatureFactor = val; 
             document.getElementById('curvature-slider').value = val;
             document.getElementById('curvature-input').value = val;
@@ -449,10 +743,14 @@ function toggleHandwritingGuides() {
                 if (removed === selectedObject) {
                     selectedObject = null;
                     document.getElementById('btn-delete-selected').style.display = 'none';
+                    closePropertyPanel();
                 }
                 if (multiSelectedObjects.includes(removed)) {
                     multiSelectedObjects = multiSelectedObjects.filter(o => o !== removed);
-                    if(multiSelectedObjects.length === 0) document.getElementById('btn-delete-selected').style.display = 'none';
+                    if(multiSelectedObjects.length === 0) {
+                        document.getElementById('btn-delete-selected').style.display = 'none';
+                        closePropertyPanel();
+                    }
                 }
                 undoCount++; 
                 renderScene();      
@@ -489,10 +787,10 @@ function toggleHandwritingGuides() {
             if (fileName.trim() === "") fileName = defaultName;
 
             const projectData = {
-                version: "1.0",
+                version: "1.1",
                 timestamp: new Date().toISOString(),
                 camera: camera,
-                objects: sceneObjects
+                objects: sceneObjects 
             };
 
             const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
@@ -522,6 +820,7 @@ function toggleHandwritingGuides() {
                         selectedObject = null;
                         multiSelectedObjects = [];
                         document.getElementById('btn-delete-selected').style.display = 'none';
+                        closePropertyPanel();
                         resetUndoCounter();
                         renderScene();
                     } else {
@@ -792,31 +1091,25 @@ function toggleHandwritingGuides() {
             c.globalCompositeOperation = 'source-over';
         }
 
-function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
-    // เพิ่มความยาวพื้นฐานขึ้นเล็กน้อยเพื่อให้ดูเพรียว (จาก 12 เป็น 14)
-    const size = 14 + (lineWidth * 1.5); 
-    const offset = lineWidth;
+        function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
+            const size = 14 + (lineWidth * 1.5); 
+            const offset = lineWidth;
 
-    c.save(); 
-    c.translate(x, y); 
-    c.rotate(angle);
-    c.beginPath(); 
-    
-    c.moveTo(offset, 0); // จุดปลายแหลม
-    // ปรับค่าแกน Y จาก 0.5 เป็น 0.35 เพื่อให้ปีกแคบลง
-    c.lineTo(-size + offset, -size * 0.30); 
-    // รอยหยักเว้าตรงกลางหัวลูกศร
-    c.lineTo(-size * 0.9 + offset, 0); 
-    // ปีกด้านล่าง
-    c.lineTo(-size + offset, size * 0.30); 
-    
-    c.closePath();
-    c.fillStyle = color; 
-    c.fill(); 
-    c.restore();
-}
-
-        
+            c.save(); 
+            c.translate(x, y); 
+            c.rotate(angle);
+            c.beginPath(); 
+            
+            c.moveTo(offset, 0); 
+            c.lineTo(-size + offset, -size * 0.30); 
+            c.lineTo(-size * 0.9 + offset, 0); 
+            c.lineTo(-size + offset, size * 0.30); 
+            
+            c.closePath();
+            c.fillStyle = color; 
+            c.fill(); 
+            c.restore();
+        }
 
         function drawCloudShape(c, x, y, w, h, color, lineWidth = 4, fillColor = '#ffffff') {
             c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
@@ -913,7 +1206,6 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
             const d = Math.sqrt(dx * dx + dy * dy);
             if (d < 1) return;
 
-            // คำนวณความโค้งเหมือนลูกศรโค้งปกติ
             let factor = obj.curvatureFactor !== undefined ? obj.curvatureFactor : 50;
             let h = Math.max(1, Math.min(Math.abs(factor), d / 2));
             const bowOutward = factor >= 0;
@@ -929,10 +1221,8 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
             const endAngle = Math.atan2(p2.y - cy, p2.x - cx);
             const ccw = bowOutward ? true : false;
 
-            // ขนาดวงกลมใหม่ (เล็กลง)
             const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; 
 
-            // 1. วาดเส้นประแบบโค้ง
             c.beginPath(); 
             c.arc(cx, cy, r, startAngle, endAngle, ccw);
             c.strokeStyle = isPreview ? '#999' : obj.color; 
@@ -941,19 +1231,16 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
             c.stroke(); 
             setLineDash(c, false);
 
-            // 2. วาดโคนวงกลมเล็กทับจุดเริ่มต้น
             c.beginPath();
             c.arc(p1.x, p1.y, circleRadius, 0, Math.PI * 2);
             c.fillStyle = obj.fillColor || '#ffffff';
             c.fill();
             c.stroke();
 
-            // 3. วาดหัวลูกศร
             if (!isPreview && !obj.pathType.includes('line')) {
                 drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
             }
         }
-
 
         function drawFreehandArrow(c, obj, isPreview = false) {
             if (!obj.points || obj.points.length < 2) return;
@@ -1042,50 +1329,42 @@ function drawHandwritingGuides(c) {
     c.save();
     const rect = canvas.getBoundingClientRect();
     
-    // คำนวณขอบเขตการวาดให้ครอบคลุมมุมมองกล้องปัจจุบัน
     const startX = (-camera.x - 2000) / camera.scale;
     const endX = (rect.width + 2000 - camera.x) / camera.scale;
     const startY = (-camera.y - 2000) / camera.scale;
     const endY = (rect.height + 2000 - camera.y) / camera.scale;
 
-    const blockHeight = 120; // ระยะห่างของบรรทัดใหญ่แต่ละชุด
-    const lineSpacing = 20; // ระยะห่างระหว่างเส้นย่อยทั้ง 4 เส้น
+    const blockHeight = 120; 
+    const lineSpacing = 20; 
 
     const firstY = Math.floor(startY / blockHeight) * blockHeight;
 
     c.lineWidth = 1 / camera.scale;
 
     for (let y = firstY; y < endY; y += blockHeight) {
-        // เส้นบนสุด (Ascender line)
         c.beginPath(); c.moveTo(startX, y); c.lineTo(endX, y);
         c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
 
-        // เส้นประตรงกลาง (Mid line)
         c.beginPath(); c.moveTo(startX, y + lineSpacing); c.lineTo(endX, y + lineSpacing);
         c.strokeStyle = '#9999ff'; c.setLineDash([5 / camera.scale, 5 / camera.scale]); c.stroke();
 
-        // เส้นฐาน (Base line)
         c.beginPath(); c.moveTo(startX, y + lineSpacing * 2); c.lineTo(endX, y + lineSpacing * 2);
         c.strokeStyle = '#9999ff'; c.setLineDash([]); c.stroke();
 
-        // เส้นล่างสุด (Descender line)
         c.beginPath(); c.moveTo(startX, y + lineSpacing * 3); c.lineTo(endX, y + lineSpacing * 3);
         c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
     }
     c.restore();
 }
 
-
         function renderScene() {
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             applyCamera(ctx);
 
-    
-    // --- แทรกโค้ด 3 บรรทัดนี้เพื่อวาดเส้นพื้นหลัง ---
-    if (showHandwritingGuides) {
-        drawHandwritingGuides(ctx);
-    }
+            if (showHandwritingGuides) {
+                drawHandwritingGuides(ctx);
+            }
    
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') return; 
@@ -1123,9 +1402,8 @@ function drawHandwritingGuides(c) {
                 } else if (obj.type === 'short-line-h') {
                     const midX = obj.x + obj.w / 2;
                     const midY = obj.y;
-                    const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; // ขนาดเท่าโคนลูกศร
+                    const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; 
 
-                    // วาดเส้นขีด
                     ctx.beginPath();
                     ctx.moveTo(obj.x, obj.y);
                     ctx.lineTo(obj.x + obj.w, obj.y);
@@ -1133,7 +1411,6 @@ function drawHandwritingGuides(c) {
                     ctx.lineWidth = obj.lineWidth || 4; 
                     ctx.stroke();
 
-                    // วาดวงกลมเล็กตรงกลาง
                     ctx.beginPath();
                     ctx.arc(midX, midY, circleRadius, 0, Math.PI * 2);
                     ctx.fillStyle = obj.fillColor || '#ffffff';
@@ -1171,6 +1448,14 @@ function drawHandwritingGuides(c) {
 
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') {
+                    if (obj.varLinked) {
+                        let box = getShapeBox(obj.varLinked);
+                        if (box) {
+                            obj.x = box.cx;
+                            obj.y = box.cy;
+                        }
+                    }
+
                     ctx.fillStyle = obj.color;
                     let fontStyle = obj.isItalic ? 'italic ' : '';
                     let fontWeight = obj.isBold ? 'bold ' : '';
@@ -1307,6 +1592,8 @@ function drawHandwritingGuides(c) {
         }
         
         function editExistingText(obj, index) {
+            if (obj.varLinked) return; 
+
             sceneObjects.splice(index, 1);
             selectedObject = null;
             document.getElementById('btn-delete-selected').style.display = 'none';
@@ -1519,6 +1806,19 @@ function drawHandwritingGuides(c) {
             }
         });
 
+        canvas.addEventListener('dblclick', (e) => {
+            if (currentTool !== 'select') return;
+            const worldPos = getWorldPos(e.clientX, e.clientY);
+            const hit = getHitObject(worldPos.x, worldPos.y);
+
+            if (hit) {
+                const type = hit.object.type;
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(type)) {
+                    openPropertyPanel(hit.object, e.clientX, e.clientY);
+                }
+            }
+        });
+
         canvas.addEventListener('pointerdown', (e) => {
             if (e.pointerType === 'touch') {
                 if (activeTextInput && !isDraggingText) finalizeTextInput();
@@ -1569,6 +1869,11 @@ function drawHandwritingGuides(c) {
                         isDraggingObject = true;
                         dragStartPoint = { x: wx, y: wy };
                         multiSelectedObjects.forEach(o => snapshotOriginalPosition(o));
+                        sceneObjects.forEach(o => {
+                            if(o.type === 'text' && multiSelectedObjects.includes(o.varLinked)) {
+                                snapshotOriginalPosition(o);
+                            }
+                        });
                     } else {
                         multiSelectedObjects = [];
                         selectedObject = hit.object;
@@ -1592,6 +1897,7 @@ function drawHandwritingGuides(c) {
                     selectedObject = null;
                     multiSelectedObjects = [];
                     document.getElementById('btn-delete-selected').style.display = 'none';
+                    closePropertyPanel();
                     
                     isLassoing = true;
                     lassoPoints = [{x: wx, y: wy}];
@@ -1828,6 +2134,11 @@ function drawHandwritingGuides(c) {
                     isDraggingObject = false;
                     let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
                     draggingList.forEach(obj => cleanupOriginalPosition(obj));
+                    sceneObjects.forEach(o => {
+                        if(o.type === 'text' && (o.varLinked === selectedObject || multiSelectedObjects.includes(o.varLinked))) {
+                            cleanupOriginalPosition(o);
+                        }
+                    });
                     return;
                 }
             }
