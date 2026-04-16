@@ -90,7 +90,7 @@
             <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร (Decision)"> 💠 </button>
             <button id="btn-parallelogram" class="tool-btn" onclick="setTool('parallelogram')" title="สี่เหลี่ยมขนมเปียกปูน (Input/Output)">▱</button>
             <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ"> ☁️ </button>
-	    <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester"> ⌛ </button>
+            <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester"> ⌛ </button>
             <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⋈</button>
             <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">ⴵ</button>
                <div style="display: flex; align-items: center; gap: 5px;">
@@ -108,6 +108,7 @@
         <div class="tool-group">
             <button id="btn-a-arrow-s" class="tool-btn" onclick="setTool('angled-arrow-solid')" title="ลูกศรเส้นทึบหักมุม"> ⬆️ </button>
             <button id="btn-circle-arrow" class="tool-btn" onclick="setTool('circle-arrow-dashed')" title="ลูกศรประโคนวงกลม"> 🔂</button>
+            <button id="btn-circle-l" class="tool-btn" onclick="setTool('circle-line-dashed')" title="เส้นประแบบโค้งโคนวงกลม (ไม่มีหัวลูกศร)"> ⤿ </button>
             <button id="btn-c-arrow-d" class="tool-btn" onclick="setTool('curved-arrow-dashed')" title="ลูกศรเส้นประแบบโค้ง"> 🔁 </button>
             <button id="btn-a-arrow-d" class="tool-btn" onclick="setTool('angled-arrow-dashed')" title="ลูกศรเส้นประหักมุม">⇢</button>
             <button id="btn-ra-arrow-s" class="tool-btn" onclick="setTool('rounded-angled-arrow-solid')" title="เส้นทึบหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;"> ⤵️ </button>
@@ -350,7 +351,7 @@ function toggleHandwritingGuides() {
             const btn = document.getElementById(btnId);
             if(btn) btn.classList.add('active');
 
-            curvatureControl.style.display = (currentTool.includes('curved') || currentTool === 'circle-arrow-dashed') ? 'flex' : 'none';
+            curvatureControl.style.display = (currentTool.includes('curved') || currentTool.includes('circle-')) ? 'flex' : 'none';
             doubleEdgeControl.style.display = currentTool === 'circle' ? 'flex' : 'none';
             textFormatControl.style.display = currentTool === 'text' ? 'flex' : 'none';
 
@@ -815,7 +816,7 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
     c.restore();
 }
 
-       
+        
 
         function drawCloudShape(c, x, y, w, h, color, lineWidth = 4, fillColor = '#ffffff') {
             c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.8);
@@ -948,7 +949,7 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
             c.stroke();
 
             // 3. วาดหัวลูกศร
-            if (!isPreview) {
+            if (!isPreview && !obj.pathType.includes('line')) {
                 drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
             }
         }
@@ -1025,14 +1026,14 @@ function drawArrowhead(c, x, y, angle, color, lineWidth = 4) {
             applyCamera(pCtx);
             
             let snapped = { p1, p2 };
-            if (!currentTool.includes('curved') && currentTool !== 'circle-arrow-dashed') {
+            if (!currentTool.includes('curved') && !currentTool.includes('circle-')) {
                 snapped = calculateSnapPoints(p1, p2); 
             }
 
             const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor, lineWidth: currentBaseSize }; 
             if (currentTool.includes('curved')) {
                 drawCurvedArrow(pCtx, obj, true);
-            } else if (currentTool === 'circle-arrow-dashed') {
+            } else if (currentTool.includes('circle-')) {
                 drawCircleTailArrow(pCtx, obj, true);
             }
         }
@@ -1161,7 +1162,7 @@ function drawHandwritingGuides(c) {
                     } else if (obj.p1 && obj.p2) {
                         if (obj.pathType.includes('curved')) {
                             drawCurvedArrow(ctx, obj);
-                        } else if (obj.pathType === 'circle-arrow-dashed') {
+                        } else if (obj.pathType.includes('circle-')) {
                             drawCircleTailArrow(ctx, obj);
                         }
                     }
@@ -1850,7 +1851,7 @@ function drawHandwritingGuides(c) {
                     }
                 } else {
                     let snapped = { p1: arrowStartPoint, p2: worldPos };
-                    if (!currentTool.includes('curved') && currentTool !== 'circle-arrow-dashed') {
+                    if (!currentTool.includes('curved') && !currentTool.includes('circle-')) {
                         snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
                     }
                     sceneObjects.push({ 
