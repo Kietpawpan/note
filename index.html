@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>System Dynamics & Unit Checker</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
-    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <link rel="manifest" href="manifest.json">
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; height: 100dvh; width: 100vw; }
         #board-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
@@ -57,21 +57,7 @@
             touch-action: none;
         }
 
-        /* UI สำหรับ Property Panel */
-        #property-panel {
-            display: none;
-            position: absolute;
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 200;
-            font-family: sans-serif;
-            width: 260px;
-        }
-
-/* UI สำหรับ Property Panel */
+        /* UI สำหรับ Property Panel ปรับขนาดใหญ่ขึ้น */
         #property-panel {
             display: none;
             position: absolute;
@@ -82,45 +68,30 @@
             box-shadow: 0 6px 20px rgba(0,0,0,0.25);
             z-index: 200;
             font-family: sans-serif;
-            width: 320px; /* ขยายความกว้างกล่องรับฟอนต์ใหญ่ */
+            width: 320px; 
         }
         #property-panel h3 { margin: 0 0 12px 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333; }
         .prop-row { margin-bottom: 12px; }
         .prop-row label { display: block; font-size: 14px; color: #444; margin-bottom: 5px; font-weight: bold; }
-        
-        /* บังคับขนาดฟอนต์ 16px ป้องกัน iPad ซูมหน้าจออัตโนมัติ */
         .prop-row input, .prop-row select { 
-            width: 100%; 
-            box-sizing: border-box; 
-            padding: 8px; 
-            border: 1px solid #ccc; 
-            border-radius: 6px; 
-            font-family: monospace; 
-            font-size: 16px; 
+            width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; 
+            border-radius: 6px; font-family: monospace; font-size: 16px; 
         }
         
-        /* Flex row for tight inputs */
         .flex-row { display: flex; gap: 12px; margin-bottom: 12px; }
         .flex-col { flex: 1; }
         .flex-col label { display: block; font-size: 14px; color: #444; margin-bottom: 5px; font-weight: bold; }
         .flex-col input { 
-            width: 100%; 
-            box-sizing: border-box; 
-            padding: 8px; 
-            border: 1px solid #ccc; 
-            border-radius: 6px; 
-            font-family: monospace; 
-            font-size: 16px; 
+            width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; 
+            border-radius: 6px; font-family: monospace; font-size: 16px; 
         }
 
         .prop-actions { display: flex; justify-content: space-between; margin-top: 18px; }
         .prop-actions button { width: auto; height: auto; padding: 8px 14px; border-radius: 6px; font-size: 14px; font-weight: bold; }
-        
         #unit-result { margin-top: 12px; font-size: 14px; font-weight: bold; padding: 8px; border-radius: 6px; display: none; line-height: 1.4; }
         .result-pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .result-fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         
-        /* ปรับปุ่มแทรกตัวแปรให้กดง่ายขึ้น */
         .var-badge {
             background: #e3f2fd; border: 1px solid #00acc1; color: #006064; 
             border-radius: 12px; padding: 5px 10px; font-size: 13px; cursor: pointer; 
@@ -128,6 +99,13 @@
         }
         .var-badge:hover { background: #b2ebf2; transform: scale(1.05); }
 
+        /* UI หน้าต่างกราฟ Simulation */
+        #sim-panel {
+            display: none; position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; 
+            background: white; z-index: 1000; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); 
+            flex-direction: column; padding: 20px; box-sizing: border-box; font-family: sans-serif;
+        }
+        .sim-input { padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 60px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -137,11 +115,11 @@
     </div>
 
     <div id="property-panel">
-        <h3>ตั้งค่าตัวแปร</h3>
+        <h3 id="prop-panel-title">ตั้งค่าตัวแปร</h3>
         
         <div class="flex-row">
             <div class="flex-col" style="flex: 1;">
-                <label>ชื่อย่อ (ใช้คำนวณ)</label>
+                <label>ชื่อย่อ (คำนวณ)</label>
                 <input type="text" id="prop-short-name" placeholder="เช่น P">
             </div>
             <div class="flex-col" style="flex: 0.5;">
@@ -156,7 +134,7 @@
         </div>
 
         <div class="prop-row" id="prop-text-pos-row" style="display: none;">
-            <label>ตำแหน่งข้อความ (เฉพาะขีด)</label>
+            <label>ตำแหน่งข้อความ</label>
             <select id="prop-text-pos">
                 <option value="above">อยู่บนขีด (Above)</option>
                 <option value="below">อยู่ใต้ขีด (Below)</option>
@@ -166,30 +144,51 @@
         <div class="prop-row" style="display: none;">
             <label>จัดตัวอักษร</label>
             <select id="prop-align">
-                <option value="center">กึ่งกลาง (Center)</option>
-                <option value="left">ชิดซ้าย (Left)</option>
+                <option value="center">กึ่งกลาง</option>
+                <option value="left">ชิดซ้าย</option>
             </select>
         </div>
 
         <div class="prop-row">
             <label>หน่วย (Unit)</label>
-            <input type="text" id="prop-unit" placeholder="เช่น person, 1/year">
+            <input type="text" id="prop-unit" placeholder="เช่น person">
         </div>
         
         <div class="prop-row" id="incoming-vars-row" style="display:none; background: #f9f9f9; padding: 5px; border-radius: 4px;">
-            <label style="color: #007AFF;">🔗 นำเข้าจากลูกศร (คลิกเพื่อแทรก)</label>
+            <label style="color: #007AFF;">🔗 นำเข้าจากลูกศร (คลิกแทรก)</label>
             <div id="incoming-vars-container" style="display: flex; flex-wrap: wrap; margin-top: 5px;"></div>
         </div>
 
+        <div class="prop-row" id="prop-initial-row" style="display: none; background: #fff3cd; padding: 8px; border-radius: 6px; border: 1px solid #ffeeba;">
+            <label style="color: #856404;">ค่าเริ่มต้นของระดับ (Initial Value)</label>
+            <input type="text" id="prop-initial" placeholder="เช่น 100">
+        </div>
+
         <div class="prop-row">
-            <label>สมการ (Equation)</label>
-            <input type="text" id="prop-equation" placeholder="เช่น 100 หรือ Pop * Rate">
+            <label id="lbl-prop-equation">สมการ (Equation)</label>
+            <input type="text" id="prop-equation" placeholder="เช่น Pop * Rate">
         </div>
         <div id="unit-result"></div>
         <div class="prop-actions">
-            <button class="action-btn" onclick="checkUnitUI()" title="ตรวจสอบความสอดคล้องของหน่วย">Check Units</button>
+            <button class="action-btn" onclick="checkUnitUI()">Check Units</button>
             <button class="active" onclick="saveProperties()">Save</button>
             <button class="danger" onclick="closePropertyPanel()">Close</button>
+        </div>
+    </div>
+
+    <div id="sim-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+            <h2 style="margin: 0; color: #333;">📈 ผลการจำลอง (Simulation)</h2>
+            <button class="danger" style="width: auto; height: auto; padding: 6px 15px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="closeSimPanel()">ปิด ✖</button>
+        </div>
+        <div style="display: flex; gap: 15px; margin-bottom: 15px; align-items: center; flex-wrap: wrap;">
+            <label>เริ่ม (Start Time): <input type="number" id="sim-start" class="sim-input" value="0"></label>
+            <label>สิ้นสุด (End Time): <input type="number" id="sim-end" class="sim-input" value="10"></label>
+            <label>ช่วงเวลา (dt): <input type="number" id="sim-dt" class="sim-input" value="0.25" step="0.05"></label>
+            <button class="active" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="runSimulation()">▶️ คำนวณใหม่</button>
+        </div>
+        <div style="flex: 1; position: relative; width: 100%;">
+            <canvas id="sim-chart"></canvas>
         </div>
     </div>
 
@@ -216,12 +215,12 @@
         </div>
         
         <div class="tool-group">
-            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่องสี่เหลี่ยม (Process)">⏹️</button>
-            <button id="btn-oval" class="tool-btn" onclick="setTool('oval')" title="วงรี (Terminal)">⬭</button>
-            <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร (Decision)"> 💠 </button>
-            <button id="btn-parallelogram" class="tool-btn" onclick="setTool('parallelogram')" title="สี่เหลี่ยมขนมเปียกปูน (Input/Output)">▱</button>
-            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ"> ☁️ </button>
-            <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์วสไตล์ Forrester"> ⌛ </button>
+            <button id="btn-rect" class="tool-btn" onclick="setTool('rect')" title="กล่อง (Stock/Level)">⏹️</button>
+            <button id="btn-oval" class="tool-btn" onclick="setTool('oval')" title="วงรี (Auxiliary/Parameter)">⬭</button>
+            <button id="btn-diamond" class="tool-btn" onclick="setTool('diamond')" title="สี่เหลี่ยมเพชร"> 💠 </button>
+            <button id="btn-parallelogram" class="tool-btn" onclick="setTool('parallelogram')" title="สี่เหลี่ยมขนมเปียกปูน">▱</button>
+            <button id="btn-cloud" class="tool-btn" onclick="setTool('cloud')" title="ก้อนเมฆ (Source/Sink)"> ☁️ </button>
+            <button id="btn-valve-poly" class="tool-btn" onclick="setTool('valve-poly')" title="วาล์ว (Rate/Flow)"> ⌛ </button>
             <button id="btn-valve-h" class="tool-btn" onclick="setTool('valve-h')" title="วาล์วแนวนอน">⋈</button>
             <button id="btn-valve-v" class="tool-btn" onclick="setTool('valve-v')" title="วาล์วแนวตั้ง">ⴵ</button>
                 <div style="display: flex; align-items: center; gap: 5px;">
@@ -246,10 +245,9 @@
             <button id="btn-ra-arrow-d" class="tool-btn" onclick="setTool('rounded-angled-arrow-dashed')" title="เส้นประหักมุมโค้งมน" style="font-weight: bold; font-size: 16px;">╰⇢</button>
             <button id="btn-a-line-s" class="tool-btn" onclick="setTool('angled-line-solid')" title="เส้นทึบหักมุม (ไม่มีหัวลูกศร)"> #️⃣ </button>
 
-<button class="action-btn" onclick="toggleHandwritingGuides()" title="เปิด/ปิด เส้นบรรทัดคัดลายมือ">📝</button>
+            <button class="action-btn" onclick="toggleHandwritingGuides()" title="เปิด/ปิด เส้นบรรทัดคัดลายมือ">📝</button>
 
             <div style="display: flex; align-items: center; gap: 5px;">
-
                 <button id="btn-c-line-d" class="tool-btn" onclick="setTool('curved-line-dashed')" title="เส้นประแบบโค้ง (ไม่มีหัวลูกศร)"> ╭╯ </button>
                   <div id="curvature-control" class="shape-control-group">
                     <label style="cursor: default; font-size: 16px;" title="ปรับระดับความโค้ง">🪃</label>
@@ -280,6 +278,8 @@
         </div>
 
         <div class="tool-group">
+            <button class="action-btn" onclick="openSimPanel()" title="จำลองกราฟ (Run Simulation)" style="background-color: #34C759;">▶️</button>
+
             <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
             
@@ -296,7 +296,7 @@
 
     <script>
         // ==========================================
-        // ส่วนการจัดการ Unit Check และ Data Model
+        // ส่วนการจัดการ Unit Check, Data Model และ Simulation
         // ==========================================
         
         try {
@@ -312,19 +312,23 @@
         } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
 
         let editingObject = null;
-        const propPanel = document.getElementById('property-panel');
+        let simChartInstance = null; // ตัวแปรกราฟ
         
+        const propPanel = document.getElementById('property-panel');
         const propShortNameInput = document.getElementById('prop-short-name');
         const propFullNameInput = document.getElementById('prop-full-name');
         const propIndexInput = document.getElementById('prop-index');
         const propAlignInput = document.getElementById('prop-align');
         const propTextPosInput = document.getElementById('prop-text-pos');
         const propTextPosRow = document.getElementById('prop-text-pos-row');
-        
         const propUnitInput = document.getElementById('prop-unit');
         const propEquationInput = document.getElementById('prop-equation');
+        const propInitialInput = document.getElementById('prop-initial');
+        const propInitialRow = document.getElementById('prop-initial-row');
+        const lblPropEquation = document.getElementById('lbl-prop-equation');
         const unitResult = document.getElementById('unit-result');
 
+        // ฟังก์ชันดึงวัตถุด้วยพิกัด
         function getShapeAtPoint(x, y, excludeObj = null) {
             for (let i = sceneObjects.length - 1; i >= 0; i--) {
                 const obj = sceneObjects[i];
@@ -341,14 +345,13 @@
             return null;
         }
 
-        // ดึงเฉพาะ "ชื่อย่อ" (varShortName) มาเป็น Smart Badges
+        // ดึงเฉพาะ "ชื่อย่อ" มาเป็น Smart Badges
         function getIncomingVariables(targetObj) {
             let incomingVars = [];
             let targetBox = getShapeBox(targetObj);
             if (!targetBox) return incomingVars;
 
             const pad = 25; 
-
             sceneObjects.forEach(obj => {
                 if (obj.type === 'arrow') { 
                     let startPt = null, endPt = null;
@@ -395,6 +398,20 @@
             
             propUnitInput.value = obj.varUnit || '';
             propEquationInput.value = obj.varEquation || '';
+            
+            // ตรวจสอบชนิดวัตถุเพื่อปรับหน้าจอตั้งค่า
+            if (obj.type === 'rect') {
+                propInitialRow.style.display = 'block';
+                propInitialInput.value = obj.varInitial || '';
+                lblPropEquation.innerText = "สมการสุทธิ (Net Flow = Inflow - Outflow)";
+                document.getElementById('prop-panel-title').innerText = "ตั้งค่าระดับ (Stock)";
+            } else {
+                propInitialRow.style.display = 'none';
+                propInitialInput.value = '';
+                lblPropEquation.innerText = "สมการ (Equation)";
+                document.getElementById('prop-panel-title').innerText = "ตั้งค่าตัวแปร";
+            }
+
             unitResult.style.display = 'none';
 
             const incomingVars = getIncomingVariables(obj);
@@ -432,8 +449,8 @@
 
             let panelX = screenX + 20;
             let panelY = screenY + 20;
-            if (panelX + 260 > window.innerWidth) panelX = window.innerWidth - 280;
-            if (panelY + 350 > window.innerHeight) panelY = window.innerHeight - 380;
+            if (panelX + 320 > window.innerWidth) panelX = window.innerWidth - 340;
+            if (panelY + 450 > window.innerHeight) panelY = window.innerHeight - 480;
 
             propPanel.style.left = panelX + 'px';
             propPanel.style.top = panelY + 'px';
@@ -458,6 +475,10 @@
                 editingObject.varUnit = propUnitInput.value.trim();
                 editingObject.varEquation = propEquationInput.value.trim();
                 
+                if (editingObject.type === 'rect') {
+                    editingObject.varInitial = propInitialInput.value.trim();
+                }
+
                 let combinedTextLines = [];
                 if (editingObject.varShortName) combinedTextLines.push(editingObject.varShortName);
                 if (editingObject.varFullName) combinedTextLines.push(editingObject.varFullName);
@@ -489,6 +510,150 @@
             closePropertyPanel();
         }
 
+        // ==========================================
+        // ส่วนของ Simulation Engine
+        // ==========================================
+        function openSimPanel() {
+            if (activeTextInput) finalizeTextInput();
+            setTool('select');
+            document.getElementById('sim-panel').style.display = 'flex';
+            runSimulation();
+        }
+
+        function closeSimPanel() {
+            document.getElementById('sim-panel').style.display = 'none';
+        }
+
+        function runSimulation() {
+            const tStart = parseFloat(document.getElementById('sim-start').value) || 0;
+            const tEnd = parseFloat(document.getElementById('sim-end').value) || 10;
+            const dt = parseFloat(document.getElementById('sim-dt').value) || 0.25;
+
+            // 1. ดึงตัวแปรทั้งหมดออกจากระบบ
+            let variables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
+            let stocks = variables.filter(v => v.type === 'rect');
+            let auxiliaries = variables.filter(v => v.type !== 'rect');
+
+            let history = { time: [] };
+            variables.forEach(v => history[v.varShortName] = []);
+
+            // 2. คอมไพล์สมการทั้งหมดล่วงหน้าเพื่อประสิทธิภาพ
+            let compiled = {};
+            variables.forEach(v => {
+                try {
+                    compiled[v.varShortName] = math.compile(v.varEquation || '0');
+                } catch(e) {
+                    compiled[v.varShortName] = math.compile('0');
+                }
+            });
+
+            // 3. กำหนดค่าเริ่มต้นของระบบ (Scope)
+            let currentScope = { Time: tStart };
+            
+            // เซ็ตค่าตัวแปร Auxiliaries เป็น 0 ชั่วคราวป้องกัน Error undefined
+            auxiliaries.forEach(aux => currentScope[aux.varShortName] = 0);
+            
+            // ประเมินค่าเริ่มต้นของ Stock
+            stocks.forEach(s => {
+                try {
+                    currentScope[s.varShortName] = math.evaluate(s.varInitial || '0', currentScope);
+                } catch(e) {
+                    currentScope[s.varShortName] = 0;
+                }
+            });
+
+            // 4. ลูปหลักจำลองตามเวลา (Euler Integration)
+            for(let t = tStart; t <= tEnd + (dt/10); t += dt) {
+                currentScope.Time = t;
+
+                // วนลูปคำนวณ Auxiliaries จนกว่าค่าจะนิ่ง (แก้ปัญหาลำดับการคำนวณ)
+                for(let pass = 0; pass < auxiliaries.length + 1; pass++) {
+                    auxiliaries.forEach(aux => {
+                        try {
+                            currentScope[aux.varShortName] = compiled[aux.varShortName].evaluate(currentScope);
+                        } catch(e) {} // ข้ามถ้ามี error ระหว่างคำนวณ pass แรกๆ
+                    });
+                }
+
+                // บันทึกประวัติศาสตร์เวลาปัจจุบัน
+                history.time.push(parseFloat(t.toFixed(4)));
+                variables.forEach(v => {
+                    history[v.varShortName].push(currentScope[v.varShortName] || 0);
+                });
+
+                // คำนวณอัตราการเปลี่ยนแปลงสุทธิของ Stock แล้วนำไปบวกอัปเดตในรอบถัดไป
+                let nextStockValues = {};
+                stocks.forEach(s => {
+                    try {
+                        let netFlow = compiled[s.varShortName].evaluate(currentScope);
+                        nextStockValues[s.varShortName] = currentScope[s.varShortName] + (netFlow * dt);
+                    } catch(e) {
+                        nextStockValues[s.varShortName] = currentScope[s.varShortName];
+                    }
+                });
+
+                // นำค่าใหม่ใส่กลับเข้า Scope เตรียมรันลูป dt ถัดไป
+                stocks.forEach(s => {
+                    currentScope[s.varShortName] = nextStockValues[s.varShortName];
+                });
+            }
+
+            // 5. นำไปสร้างกราฟด้วย Chart.js
+            renderSimulationChart(history, variables);
+        }
+
+        function renderSimulationChart(history, variables) {
+            const ctxChart = document.getElementById('sim-chart').getContext('2d');
+            
+            // สร้างชุดสีสวยๆ วนใช้งาน
+            const colors = ['#FF3B30', '#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#FFCC00'];
+
+            const datasets = variables.map((v, i) => {
+                return {
+                    label: v.varShortName + (v.varUnit ? ` (${v.varUnit})` : ''),
+                    data: history[v.varShortName],
+                    borderColor: colors[i % colors.length],
+                    backgroundColor: colors[i % colors.length] + '33', // เติมความโปร่งใสให้สี
+                    fill: false,
+                    tension: 0.2, // ความโค้งของเส้น
+                    pointRadius: 2,
+                    borderWidth: 2
+                };
+            });
+
+            if (simChartInstance) {
+                simChartInstance.destroy(); // ลบกราฟเดิมทิ้งก่อนวาดใหม่
+            }
+
+            simChartInstance = new Chart(ctxChart, {
+                type: 'line',
+                data: {
+                    labels: history.time,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: { backgroundColor: 'rgba(0,0,0,0.8)' }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Time', font: { weight: 'bold' } }
+                        },
+                        y: {
+                            title: { display: true, text: 'Value', font: { weight: 'bold' } }
+                        }
+                    }
+                }
+            });
+        }
+
         function checkUnitUI() {
             if (!editingObject) return;
             
@@ -500,7 +665,7 @@
             unitResult.className = '';
 
             if (!nameToUse || !lhsUnit || !rhsEquation) {
-                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ(หรือชื่อเต็ม), หน่วย และสมการให้ครบ";
+                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ, หน่วย และสมการให้ครบ";
                 unitResult.classList.add('result-fail');
                 return;
             }
@@ -550,9 +715,8 @@
             }
         }
 
-
         // ==========================================
-        // ส่วนจัดการ Canvas เดิม
+        // ส่วนจัดการ Canvas เริ่มจากจุดนี้ลงไป...
         // ==========================================
         const canvas = document.getElementById('board');
         const ctx = canvas.getContext('2d', { desynchronized: true });
@@ -566,14 +730,9 @@
         const textFormatControl = document.getElementById('text-format-control');
         const textSizeInput = document.getElementById('text-size-input'); 
 
-let showHandwritingGuides = false;
+        let showHandwritingGuides = false;
+        function toggleHandwritingGuides() { showHandwritingGuides = !showHandwritingGuides; renderScene(); }
 
-function toggleHandwritingGuides() {
-    showHandwritingGuides = !showHandwritingGuides;
-    renderScene();
-}
-
-        
         let currentTool = 'pen';
         let currentColor = '#000000';
         let currentBaseSize = 2;
@@ -698,10 +857,7 @@ function toggleHandwritingGuides() {
             context.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, camera.x * dpr, camera.y * dpr);
         }
 
-        function resetView() {
-            camera = { x: 0, y: 0, scale: 1 };
-            renderScene();
-        }
+        function resetView() { camera = { x: 0, y: 0, scale: 1 }; renderScene(); }
 
         function getWorldPos(screenX, screenY) {
             const rect = canvas.getBoundingClientRect();
@@ -764,9 +920,7 @@ function toggleHandwritingGuides() {
             textAlignMode = textAlignMode === 'left' ? 'center' : 'left';
             btn.innerHTML = textAlignMode === 'center' ? 'C' : 'L';
             btn.classList.toggle('active', textAlignMode === 'center');
-            if (activeTextInput) {
-                activeTextInput.style.textAlign = textAlignMode;
-            }
+            if (activeTextInput) activeTextInput.style.textAlign = textAlignMode;
         }
 
         function toggleTextFormat(format, btn) {
@@ -860,9 +1014,7 @@ function toggleHandwritingGuides() {
             }
         }
 
-        function resetUndoCounter() {
-            undoCount = 0;
-        }
+        function resetUndoCounter() { undoCount = 0; }
 
         function getCanvasWithWhiteBackground() {
             const tempCanvas = document.createElement('canvas');
@@ -881,14 +1033,13 @@ function toggleHandwritingGuides() {
 
             const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, '');
             const defaultName = `sd-project-${dateStr}`;
-            
             let fileName = prompt("ตั้งชื่อไฟล์โปรเจกต์ที่ต้องการบันทึก (ไม่ต้องพิมพ์ .json):" , defaultName);
             
             if (fileName === null) return; 
             if (fileName.trim() === "") fileName = defaultName;
 
             const projectData = {
-                version: "1.2",
+                version: "1.3",
                 timestamp: new Date().toISOString(),
                 camera: camera,
                 objects: sceneObjects 
@@ -911,7 +1062,6 @@ function toggleHandwritingGuides() {
             if (activeTextInput) finalizeTextInput();
 
             const reader = new FileReader();
-            
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
@@ -924,21 +1074,11 @@ function toggleHandwritingGuides() {
                         closePropertyPanel();
                         resetUndoCounter();
                         renderScene();
-                    } else {
-                        alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้');
-                    }
-                } catch (err) {
-                    alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย');
-                } finally {
-                    input.value = ''; 
-                }
+                    } else { alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้'); }
+                } catch (err) { alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย'); } 
+                finally { input.value = ''; }
             };
-
-            reader.onerror = () => {
-                alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้');
-                input.value = '';
-            };
-
+            reader.onerror = () => { alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้'); input.value = ''; };
             reader.readAsText(file);
         }
 
@@ -1000,7 +1140,6 @@ function toggleHandwritingGuides() {
             } else if (obj.type === 'circle') {
                 box = { left: obj.x - obj.radius, right: obj.x + obj.radius, top: obj.y - obj.radius, bottom: obj.y + obj.radius, cx: obj.x, cy: obj.y };
             }
-            
             if (box) box.isValve = (obj.type === 'valve-h' || obj.type === 'valve-v' || obj.type === 'valve-poly');
             return box;
         }
@@ -1013,9 +1152,7 @@ function toggleHandwritingGuides() {
                 ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
                 let lines = (obj.isAllCaps ? obj.text.toUpperCase() : obj.text).split('\n');
                 let maxWidth = 0;
-                lines.forEach(line => {
-                    maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-                });
+                lines.forEach(line => { maxWidth = Math.max(maxWidth, ctx.measureText(line).width); });
                 let totalHeight = lines.length * (obj.fontSize * 1.2);
                 return { left: obj.x - maxWidth/2, right: obj.x + maxWidth/2, top: obj.y - totalHeight/2, bottom: obj.y + totalHeight/2, cx: obj.x, cy: obj.y };
             } else if (obj.points) {
@@ -1041,14 +1178,10 @@ function toggleHandwritingGuides() {
                 if (!box) continue;
 
                 if (!foundV && Math.abs(cx - box.cx) < threshold) {
-                    snappedCx = box.cx;
-                    guides.push({ type: 'v', val: box.cx });
-                    foundV = true;
+                    snappedCx = box.cx; guides.push({ type: 'v', val: box.cx }); foundV = true;
                 }
                 if (!foundH && Math.abs(cy - box.cy) < threshold) {
-                    snappedCy = box.cy;
-                    guides.push({ type: 'h', val: box.cy });
-                    foundH = true;
+                    snappedCy = box.cy; guides.push({ type: 'h', val: box.cy }); foundH = true;
                 }
             }
             return { x: snappedCx, y: snappedCy, guides: guides };
@@ -1110,32 +1243,22 @@ function toggleHandwritingGuides() {
 
                 if (!movingAxis) {
                     if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) > threshold) {
-                        movingAxis = 'x';
-                        current.x = pt.x;
-                        result.push({ x: current.x, y: current.y });
+                        movingAxis = 'x'; current.x = pt.x; result.push({ x: current.x, y: current.y });
                     } else if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > threshold) {
-                        movingAxis = 'y';
-                        current.y = pt.y;
-                        result.push({ x: current.x, y: current.y });
+                        movingAxis = 'y'; current.y = pt.y; result.push({ x: current.x, y: current.y });
                     }
                 } else {
                     if (movingAxis === 'x') {
                         current.x = pt.x; 
                         result[result.length - 1] = { x: current.x, y: current.y };
-                        
                         if (Math.abs(pt.y - current.y) > threshold) {
-                            movingAxis = 'y';
-                            current.y = pt.y;
-                            result.push({ x: current.x, y: current.y });
+                            movingAxis = 'y'; current.y = pt.y; result.push({ x: current.x, y: current.y });
                         }
                     } else {
                         current.y = pt.y; 
                         result[result.length - 1] = { x: current.x, y: current.y };
-                        
                         if (Math.abs(pt.x - current.x) > threshold) {
-                            movingAxis = 'x';
-                            current.x = pt.x;
-                            result.push({ x: current.x, y: current.y });
+                            movingAxis = 'x'; current.x = pt.x; result.push({ x: current.x, y: current.y });
                         }
                     }
                 }
@@ -1143,34 +1266,25 @@ function toggleHandwritingGuides() {
             
             if (result.length > 1) {
                 let lastRaw = points[points.length - 1];
-                if (movingAxis === 'x') {
-                    result[result.length - 1] = { x: lastRaw.x, y: current.y };
-                } else if (movingAxis === 'y') {
-                    result[result.length - 1] = { x: current.x, y: lastRaw.y };
-                }
+                if (movingAxis === 'x') { result[result.length - 1] = { x: lastRaw.x, y: current.y }; } 
+                else if (movingAxis === 'y') { result[result.length - 1] = { x: current.x, y: lastRaw.y }; }
             }
             
             let cleanResult = [result[0]];
             for (let i = 1; i < result.length; i++) {
                 let prev = cleanResult[cleanResult.length - 1];
                 let curr = result[i];
-                if (Math.abs(curr.x - prev.x) > 1 || Math.abs(curr.y - prev.y) > 1) {
-                    cleanResult.push(curr);
-                }
+                if (Math.abs(curr.x - prev.x) > 1 || Math.abs(curr.y - prev.y) > 1) { cleanResult.push(curr); }
             }
 
-            if (cleanResult.length === 1) {
-                cleanResult.push({ x: points[points.length-1].x, y: points[points.length-1].y });
-            }
-            
+            if (cleanResult.length === 1) { cleanResult.push({ x: points[points.length-1].x, y: points[points.length-1].y }); }
             return cleanResult;
         }
 
         function drawSmoothPath(c, pathData) {
             if (!pathData.points || pathData.points.length === 0) return;
             c.beginPath();
-            c.lineCap = 'round';
-            c.lineJoin = 'round';
+            c.lineCap = 'round'; c.lineJoin = 'round';
             c.globalCompositeOperation = pathData.type === 'eraser' ? 'destination-out' : 'source-over';
             c.strokeStyle = pathData.type === 'eraser' ? 'rgba(0,0,0,1)' : (pathData.color || '#000');
             c.lineWidth = pathData.type === 'eraser' ? pathData.baseSize * 2.5 : pathData.baseSize;
@@ -1207,9 +1321,7 @@ function toggleHandwritingGuides() {
             c.lineTo(-size + offset, size * 0.30); 
             
             c.closePath();
-            c.fillStyle = color; 
-            c.fill(); 
-            c.restore();
+            c.fillStyle = color; c.fill(); c.restore();
         }
 
         function drawCloudShape(c, x, y, w, h, color, lineWidth = 4, fillColor = '#ffffff') {
@@ -1236,38 +1348,25 @@ function toggleHandwritingGuides() {
         function drawValvePolyShape(c, obj) {
             const {x, y, w, h, color, lineWidth} = obj;
             const cy = y + h / 2;
-
             const headH = h * 0.6; 
-            
             const neckX_ref = x + w * 0.75; 
-            const dx = w * 0.25; 
-            const dy = headH / 2; 
-            const slopeX = dx / dy; 
-            const insetX = (h / 2) * slopeX; 
+            const dx = w * 0.25; const dy = headH / 2; 
+            const slopeX = dx / dy; const insetX = (h / 2) * slopeX; 
             const origTopX = Math.max(x, neckX_ref - insetX);
-            
             const topX = x + ((origTopX - x) * 2);
             const bottomX = x + ((origTopX - x) * 2); 
 
             c.beginPath();
             c.moveTo(x, y);            
             c.lineTo(topX, y);         
-            
             c.lineTo(x + w, cy + headH / 2); 
-            
             c.lineTo(x + w, cy - headH / 2); 
-
             c.lineTo(bottomX, y + h); 
-            
             c.lineTo(x, y + h);        
             c.closePath();             
 
-            c.fillStyle = obj.fillColor || '#ffffff';
-            c.fill();
-            c.strokeStyle = color;
-            c.lineWidth = lineWidth || 4;
-            c.lineJoin = 'miter';
-            c.stroke();
+            c.fillStyle = obj.fillColor || '#ffffff'; c.fill();
+            c.strokeStyle = color; c.lineWidth = lineWidth || 4; c.lineJoin = 'miter'; c.stroke();
         }
 
         function setLineDash(c, isDashed) { if (isDashed) c.setLineDash([10, 5]); else c.setLineDash([]); }
@@ -1328,15 +1427,10 @@ function toggleHandwritingGuides() {
             c.arc(cx, cy, r, startAngle, endAngle, ccw);
             c.strokeStyle = isPreview ? '#999' : obj.color; 
             c.lineWidth = obj.lineWidth || 4; 
-            setLineDash(c, true); 
-            c.stroke(); 
-            setLineDash(c, false);
+            setLineDash(c, true); c.stroke(); setLineDash(c, false);
 
-            c.beginPath();
-            c.arc(p1.x, p1.y, circleRadius, 0, Math.PI * 2);
-            c.fillStyle = obj.fillColor || '#ffffff';
-            c.fill();
-            c.stroke();
+            c.beginPath(); c.arc(p1.x, p1.y, circleRadius, 0, Math.PI * 2);
+            c.fillStyle = obj.fillColor || '#ffffff'; c.fill(); c.stroke();
 
             if (!isPreview && !obj.pathType.includes('line')) {
                 drawArrowhead(c, p2.x, p2.y, endAngle + (ccw ? -Math.PI / 2 : Math.PI / 2), obj.color, obj.lineWidth || 4);
@@ -1348,17 +1442,12 @@ function toggleHandwritingGuides() {
 
             c.beginPath();
             c.moveTo(obj.points[0].x, obj.points[0].y);
-            for (let i = 1; i < obj.points.length; i++) {
-                c.lineTo(obj.points[i].x, obj.points[i].y);
-            }
+            for (let i = 1; i < obj.points.length; i++) { c.lineTo(obj.points[i].x, obj.points[i].y); }
 
             c.strokeStyle = isPreview ? '#999' : obj.color;
-            c.lineWidth = obj.lineWidth || 4;
-            c.lineJoin = 'round'; 
+            c.lineWidth = obj.lineWidth || 4; c.lineJoin = 'round'; 
             
-            setLineDash(c, obj.pathType.includes('dashed'));
-            c.stroke();
-            setLineDash(c, false);
+            setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
             c.lineJoin = 'miter';
 
             if (!isPreview && !obj.pathType.includes('line')) {
@@ -1372,38 +1461,26 @@ function toggleHandwritingGuides() {
         function drawRoundedOrthogonalArrow(c, obj, isPreview = false) {
             if (!obj.points || obj.points.length < 2) return;
 
-            c.beginPath();
-            c.moveTo(obj.points[0].x, obj.points[0].y);
+            c.beginPath(); c.moveTo(obj.points[0].x, obj.points[0].y);
 
             let maxRadius = 20;
-
             if (obj.points.length > 2) {
                 for (let i = 1; i < obj.points.length - 1; i++) {
-                    let p0 = obj.points[i-1];
-                    let p1 = obj.points[i];
-                    let p2 = obj.points[i+1];
-                    
-                    let d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-                    let d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                    let p0 = obj.points[i-1], p1 = obj.points[i], p2 = obj.points[i+1];
+                    let d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y), d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
                     let radius = Math.min(maxRadius, d1 / 2, d2 / 2);
-
                     c.arcTo(p1.x, p1.y, p2.x, p2.y, radius);
                 }
             }
             c.lineTo(obj.points[obj.points.length - 1].x, obj.points[obj.points.length - 1].y);
 
             c.strokeStyle = isPreview ? '#999' : obj.color;
-            c.lineWidth = obj.lineWidth || 4;
-            c.lineJoin = 'round';
-            c.lineCap = 'round';
+            c.lineWidth = obj.lineWidth || 4; c.lineJoin = 'round'; c.lineCap = 'round';
 
-            setLineDash(c, obj.pathType.includes('dashed'));
-            c.stroke();
-            setLineDash(c, false);
+            setLineDash(c, obj.pathType.includes('dashed')); c.stroke(); setLineDash(c, false);
 
             if (!isPreview && !obj.pathType.includes('line')) {
-                let endPt = obj.points[obj.points.length - 1];
-                let prevPt = obj.points[obj.points.length - 2];
+                let endPt = obj.points[obj.points.length - 1], prevPt = obj.points[obj.points.length - 2];
                 const angle = Math.atan2(endPt.y - prevPt.y, endPt.x - prevPt.x);
                 drawArrowhead(c, endPt.x, endPt.y, angle, obj.color, obj.lineWidth || 4);
             }
@@ -1414,249 +1491,126 @@ function toggleHandwritingGuides() {
             applyCamera(pCtx);
             
             let snapped = { p1, p2 };
-            if (!currentTool.includes('curved') && !currentTool.includes('circle-')) {
-                snapped = calculateSnapPoints(p1, p2); 
-            }
+            if (!currentTool.includes('curved') && !currentTool.includes('circle-')) { snapped = calculateSnapPoints(p1, p2); }
 
             const obj = { p1: snapped.p1, p2: snapped.p2, color: '#999', pathType: currentTool, curvatureFactor: currentCurvatureFactor, lineWidth: currentBaseSize }; 
-            if (currentTool.includes('curved')) {
-                drawCurvedArrow(pCtx, obj, true);
-            } else if (currentTool.includes('circle-')) {
-                drawCircleTailArrow(pCtx, obj, true);
-            }
+            if (currentTool.includes('curved')) { drawCurvedArrow(pCtx, obj, true); } 
+            else if (currentTool.includes('circle-')) { drawCircleTailArrow(pCtx, obj, true); }
         }
 
-function drawHandwritingGuides(c) {
-    c.save();
-    const rect = canvas.getBoundingClientRect();
-    
-    const startX = (-camera.x - 2000) / camera.scale;
-    const endX = (rect.width + 2000 - camera.x) / camera.scale;
-    const startY = (-camera.y - 2000) / camera.scale;
-    const endY = (rect.height + 2000 - camera.y) / camera.scale;
+        function drawHandwritingGuides(c) {
+            c.save(); const rect = canvas.getBoundingClientRect();
+            const startX = (-camera.x - 2000) / camera.scale; const endX = (rect.width + 2000 - camera.x) / camera.scale;
+            const startY = (-camera.y - 2000) / camera.scale; const endY = (rect.height + 2000 - camera.y) / camera.scale;
+            const blockHeight = 120; const lineSpacing = 20; 
+            const firstY = Math.floor(startY / blockHeight) * blockHeight;
+            c.lineWidth = 1 / camera.scale;
 
-    const blockHeight = 120; 
-    const lineSpacing = 20; 
-
-    const firstY = Math.floor(startY / blockHeight) * blockHeight;
-
-    c.lineWidth = 1 / camera.scale;
-
-    for (let y = firstY; y < endY; y += blockHeight) {
-        c.beginPath(); c.moveTo(startX, y); c.lineTo(endX, y);
-        c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
-
-        c.beginPath(); c.moveTo(startX, y + lineSpacing); c.lineTo(endX, y + lineSpacing);
-        c.strokeStyle = '#9999ff'; c.setLineDash([5 / camera.scale, 5 / camera.scale]); c.stroke();
-
-        c.beginPath(); c.moveTo(startX, y + lineSpacing * 2); c.lineTo(endX, y + lineSpacing * 2);
-        c.strokeStyle = '#9999ff'; c.setLineDash([]); c.stroke();
-
-        c.beginPath(); c.moveTo(startX, y + lineSpacing * 3); c.lineTo(endX, y + lineSpacing * 3);
-        c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
-    }
-    c.restore();
-}
+            for (let y = firstY; y < endY; y += blockHeight) {
+                c.beginPath(); c.moveTo(startX, y); c.lineTo(endX, y); c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
+                c.beginPath(); c.moveTo(startX, y + lineSpacing); c.lineTo(endX, y + lineSpacing); c.strokeStyle = '#9999ff'; c.setLineDash([5 / camera.scale, 5 / camera.scale]); c.stroke();
+                c.beginPath(); c.moveTo(startX, y + lineSpacing * 2); c.lineTo(endX, y + lineSpacing * 2); c.strokeStyle = '#9999ff'; c.setLineDash([]); c.stroke();
+                c.beginPath(); c.moveTo(startX, y + lineSpacing * 3); c.lineTo(endX, y + lineSpacing * 3); c.strokeStyle = '#ff9999'; c.setLineDash([]); c.stroke();
+            }
+            c.restore();
+        }
 
         function renderScene() {
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            applyCamera(ctx);
-
-            if (showHandwritingGuides) {
-                drawHandwritingGuides(ctx);
-            }
+            ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); applyCamera(ctx);
+            if (showHandwritingGuides) drawHandwritingGuides(ctx);
    
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') return; 
-
-                if (obj.type === 'pen' || obj.type === 'eraser') {
-                    drawSmoothPath(ctx, obj);
-                } else if (obj.type === 'rect') {
+                if (obj.type === 'pen' || obj.type === 'eraser') { drawSmoothPath(ctx, obj); } 
+                else if (obj.type === 'rect') {
                     ctx.beginPath(); ctx.rect(obj.x, obj.y, obj.w, obj.h);
-                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
-                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'oval') {
-                    ctx.beginPath();
-                    ctx.ellipse(obj.x + obj.w/2, obj.y + obj.h/2, obj.w/2, obj.h/2, 0, 0, 2 * Math.PI);
-                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
-                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                    ctx.beginPath(); ctx.ellipse(obj.x + obj.w/2, obj.y + obj.h/2, obj.w/2, obj.h/2, 0, 0, 2 * Math.PI);
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'diamond') {
-                    ctx.beginPath();
-                    ctx.moveTo(obj.x + obj.w/2, obj.y);
-                    ctx.lineTo(obj.x + obj.w, obj.y + obj.h/2);
-                    ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h);
-                    ctx.lineTo(obj.x, obj.y + obj.h/2);
-                    ctx.closePath();
-                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
-                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(obj.x + obj.w/2, obj.y); ctx.lineTo(obj.x + obj.w, obj.y + obj.h/2);
+                    ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h); ctx.lineTo(obj.x, obj.y + obj.h/2); ctx.closePath();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'parallelogram') {
-                    let offset = obj.w * 0.2;
-                    ctx.beginPath();
-                    ctx.moveTo(obj.x + offset, obj.y);
-                    ctx.lineTo(obj.x + obj.w, obj.y);
-                    ctx.lineTo(obj.x + obj.w - offset, obj.y + obj.h);
-                    ctx.lineTo(obj.x, obj.y + obj.h);
-                    ctx.closePath();
-                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill();
-                    ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                    let offset = obj.w * 0.2; ctx.beginPath(); ctx.moveTo(obj.x + offset, obj.y); ctx.lineTo(obj.x + obj.w, obj.y);
+                    ctx.lineTo(obj.x + obj.w - offset, obj.y + obj.h); ctx.lineTo(obj.x, obj.y + obj.h); ctx.closePath();
+                    ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
                 } else if (obj.type === 'short-line-h') {
-                    const midX = obj.x + obj.w / 2;
-                    const midY = obj.y;
-                    const circleRadius = 3 + (obj.lineWidth || 4) * 0.4; 
-
-                    ctx.beginPath();
-                    ctx.moveTo(obj.x, obj.y);
-                    ctx.lineTo(obj.x + obj.w, obj.y);
-                    ctx.strokeStyle = obj.color; 
-                    ctx.lineWidth = obj.lineWidth || 4; 
-                    ctx.stroke();
-
-                    ctx.beginPath();
-                    ctx.arc(midX, midY, circleRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = obj.fillColor || '#ffffff';
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (obj.type === 'cloud') {
-                    drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4, obj.fillColor || '#ffffff');
-                } else if (obj.type === 'valve-h' || obj.type === 'valve-v') {
-                    drawValveShape(ctx, obj);
-                } else if (obj.type === 'valve-poly') {
-                    drawValvePolyShape(ctx, obj);
-                } else if (obj.type === 'circle') {
+                    const midX = obj.x + obj.w / 2, midY = obj.y, circleRadius = 3 + (obj.lineWidth || 4) * 0.4; 
+                    ctx.beginPath(); ctx.moveTo(obj.x, obj.y); ctx.lineTo(obj.x + obj.w, obj.y); ctx.strokeStyle = obj.color; ctx.lineWidth = obj.lineWidth || 4; ctx.stroke();
+                    ctx.beginPath(); ctx.arc(midX, midY, circleRadius, 0, Math.PI * 2); ctx.fillStyle = obj.fillColor || '#ffffff'; ctx.fill(); ctx.stroke();
+                } else if (obj.type === 'cloud') { drawCloudShape(ctx, obj.x, obj.y, obj.w, obj.h, obj.color, obj.lineWidth || 4, obj.fillColor || '#ffffff'); } 
+                else if (obj.type === 'valve-h' || obj.type === 'valve-v') { drawValveShape(ctx, obj); } 
+                else if (obj.type === 'valve-poly') { drawValvePolyShape(ctx, obj); } 
+                else if (obj.type === 'circle') {
                     ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = obj.fillColor || '#ffffff';
                     ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
-                    if (obj.isDouble) { 
-                        ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); 
-                    }
-                    ctx.stroke();
+                    if (obj.isDouble) { ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); } ctx.stroke();
                 } else if (obj.type === 'arrow') {
-                    if (obj.points) {
-                        if (obj.pathType.includes('rounded-angled')) {
-                            drawRoundedOrthogonalArrow(ctx, obj, false);
-                        } else {
-                            drawFreehandArrow(ctx, obj, false);
-                        }
-                    } else if (obj.p1 && obj.p2) {
-                        if (obj.pathType.includes('curved')) {
-                            drawCurvedArrow(ctx, obj);
-                        } else if (obj.pathType.includes('circle-')) {
-                            drawCircleTailArrow(ctx, obj);
-                        }
-                    }
+                    if (obj.points) { if (obj.pathType.includes('rounded-angled')) { drawRoundedOrthogonalArrow(ctx, obj, false); } else { drawFreehandArrow(ctx, obj, false); } } 
+                    else if (obj.p1 && obj.p2) { if (obj.pathType.includes('curved')) { drawCurvedArrow(ctx, obj); } else if (obj.pathType.includes('circle-')) { drawCircleTailArrow(ctx, obj); } }
                 }
             });
 
-            // --- ส่วนของการวาด Text ---
             sceneObjects.forEach(obj => {
                 if (obj.type === 'text') {
                     ctx.fillStyle = obj.color;
-                    let fontStyle = obj.isItalic ? 'italic ' : '';
-                    let fontWeight = obj.isBold ? 'bold ' : '';
-                    ctx.font = `${fontStyle}${fontWeight}${obj.fontSize}px sans-serif`;
-                    ctx.textBaseline = 'middle';
+                    let fontStyle = obj.isItalic ? 'italic ' : '', fontWeight = obj.isBold ? 'bold ' : '';
+                    ctx.font = `${fontStyle}${fontWeight}${obj.fontSize}px sans-serif`; ctx.textBaseline = 'middle';
 
-                    // 1. กรณีที่ Text ผูกติดอยู่กับรูปทรง
                     if (obj.varLinked) {
-                        let parentShape = obj.varLinked;
-                        let box = getShapeBox(parentShape);
-                        
+                        let parentShape = obj.varLinked, box = getShapeBox(parentShape);
                         if (box) {
-                            obj.x = box.cx;
-                            obj.y = box.cy;
-                            
-                            let linesToDraw = [];
-                            let lineHeight = obj.fontSize * 1.2;
-                            let startY = box.cy; 
+                            obj.x = box.cx; obj.y = box.cy;
+                            let linesToDraw = [], lineHeight = obj.fontSize * 1.2, startY = box.cy; 
 
                             if (parentShape.type === 'circle' || parentShape.type === 'short-line-h') {
-                                // บังคับจัดกึ่งกลางสำหรับวงกลมและเส้นขีด
                                 let align = 'center';
                                 if (parentShape.varShortName) linesToDraw.push({ text: parentShape.varShortName, align: align, x: box.cx });
                                 if (parentShape.varFullName) linesToDraw.push({ text: parentShape.varFullName, align: align, x: box.cx });
                                 if (parentShape.varIndex) linesToDraw.push({ text: parentShape.varIndex, align: align, x: box.cx });
-                                
                                 startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
-
-                                // จัดตำแหน่ง บน/ล่าง สำหรับเส้นขีด
                                 if (parentShape.type === 'short-line-h') {
-                                    let totalHeight = linesToDraw.length * lineHeight;
-                                    let padY = 15;
-                                    if (parentShape.varTextPos === 'below') {
-                                        startY = box.cy + padY + lineHeight/2; 
-                                    } else { 
-                                        startY = box.cy - padY - totalHeight + lineHeight/2; 
-                                    }
+                                    let totalHeight = linesToDraw.length * lineHeight, padY = 15;
+                                    if (parentShape.varTextPos === 'below') { startY = box.cy + padY + lineHeight/2; } 
+                                    else { startY = box.cy - padY - totalHeight + lineHeight/2; }
                                 }
                             } else {
-                                // จัดชิดซ้าย-ขวา สำหรับกล่องรูปแบบอื่นๆ
-                                let w = box.right - box.left;
-                                let padX = Math.max(10, w * 0.15); 
-                                let rightPadX = padX;
-                                
-                                // ปรับเฉพาะวาล์ว Forrester ให้บรรทัด 3 เขยิบเข้าอีก 25px
-                                if (parentShape.type === 'valve-poly') {
-                                    rightPadX = padX + 25; 
-                                }
-
+                                let w = box.right - box.left, padX = Math.max(10, w * 0.15), rightPadX = padX;
+                                if (parentShape.type === 'valve-poly') rightPadX = padX + 25; 
                                 if (parentShape.varShortName) linesToDraw.push({ text: parentShape.varShortName, align: 'left', x: box.left + padX });
                                 if (parentShape.varFullName) linesToDraw.push({ text: parentShape.varFullName, align: 'left', x: box.left + padX });
                                 if (parentShape.varIndex) linesToDraw.push({ text: parentShape.varIndex, align: 'right', x: box.right - rightPadX });
-
                                 startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
                             }
 
                             linesToDraw.forEach((item, index) => {
                                 ctx.textAlign = item.align;
                                 let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
-                                let lineY = startY + (index * lineHeight);
-                                ctx.fillText(textStr, item.x, lineY);
+                                let lineY = startY + (index * lineHeight); ctx.fillText(textStr, item.x, lineY);
                             });
                         }
-                        return; // จบการวาด text ที่ผูกกับรูปทรง
+                        return; 
                     }
 
-                    // 2. กรณี Text อิสระที่ผู้ใช้พิมพ์เองบนกระดาน
-                    let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text;
-                    let lines = drawText.split('\n');
-                    
-                    let maxWidth = 0;
-                    lines.forEach(line => {
-                        maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-                    });
-
-                    let lineHeight = obj.fontSize * 1.2;
-                    let startY = obj.y - ((lines.length - 1) * lineHeight) / 2;
-                    
-                    let align = obj.align || 'left';
+                    let drawText = obj.isAllCaps ? obj.text.toUpperCase() : obj.text, lines = drawText.split('\n'), maxWidth = 0;
+                    lines.forEach(line => { maxWidth = Math.max(maxWidth, ctx.measureText(line).width); });
+                    let lineHeight = obj.fontSize * 1.2, startY = obj.y - ((lines.length - 1) * lineHeight) / 2, align = obj.align || 'left';
                     ctx.textAlign = align;
                     
                     lines.forEach((line, index) => {
                         let drawX = obj.x;
-                        if (align === 'left') {
-                            drawX = obj.x - maxWidth / 2;
-                        } else if (align === 'right') { 
-                            drawX = obj.x + maxWidth / 2;
-                        }
+                        if (align === 'left') drawX = obj.x - maxWidth / 2;
+                        else if (align === 'right') drawX = obj.x + maxWidth / 2;
                         
-                        let lineY = startY + (index * lineHeight);
-                        ctx.fillText(line, drawX, lineY);
+                        let lineY = startY + (index * lineHeight); ctx.fillText(line, drawX, lineY);
 
                         if (obj.isUnderline) {
-                            let metrics = ctx.measureText(line);
-                            let textWidth = metrics.width;
-                            let yOffset = obj.fontSize * 0.4;
-                            
-                            ctx.beginPath();
-                            ctx.strokeStyle = obj.color;
-                            ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
-                            if (align === 'left') {
-                                ctx.moveTo(drawX, lineY + yOffset);
-                                ctx.lineTo(drawX + textWidth, lineY + yOffset);
-                            } else {
-                                ctx.moveTo(obj.x - textWidth / 2, lineY + yOffset);
-                                ctx.lineTo(obj.x + textWidth / 2, lineY + yOffset);
-                            }
+                            let metrics = ctx.measureText(line), textWidth = metrics.width, yOffset = obj.fontSize * 0.4;
+                            ctx.beginPath(); ctx.strokeStyle = obj.color; ctx.lineWidth = Math.max(1.5, obj.fontSize / 15);
+                            if (align === 'left') { ctx.moveTo(drawX, lineY + yOffset); ctx.lineTo(drawX + textWidth, lineY + yOffset); } 
+                            else { ctx.moveTo(obj.x - textWidth / 2, lineY + yOffset); ctx.lineTo(obj.x + textWidth / 2, lineY + yOffset); }
                             ctx.stroke();
                         }
                     });
@@ -1664,40 +1618,20 @@ function drawHandwritingGuides(c) {
             });
 
             if (activeGuides.length > 0) {
-                ctx.save();
-                ctx.strokeStyle = '#34C759'; 
-                ctx.lineWidth = 2 / camera.scale; 
-                ctx.setLineDash([10 / camera.scale, 10 / camera.scale]);
-                
+                ctx.save(); ctx.strokeStyle = '#34C759'; ctx.lineWidth = 2 / camera.scale; ctx.setLineDash([10 / camera.scale, 10 / camera.scale]);
                 activeGuides.forEach(g => {
                     ctx.beginPath();
-                    if (g.type === 'v') {
-                        ctx.moveTo(g.val, -50000); 
-                        ctx.lineTo(g.val, 50000);
-                    } else {
-                        ctx.moveTo(-50000, g.val); 
-                        ctx.lineTo(50000, g.val);
-                    }
-                    ctx.stroke();
+                    if (g.type === 'v') { ctx.moveTo(g.val, -50000); ctx.lineTo(g.val, 50000); } 
+                    else { ctx.moveTo(-50000, g.val); ctx.lineTo(50000, g.val); } ctx.stroke();
                 });
                 ctx.restore();
             }
 
             if (lassoPoints.length > 0) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
-                for(let i = 1; i < lassoPoints.length; i++){
-                    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
-                }
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(0, 122, 255, 0.1)';
-                ctx.fill();
-                ctx.strokeStyle = '#007AFF';
-                ctx.lineWidth = 1.5 / camera.scale;
-                ctx.setLineDash([6 / camera.scale, 6 / camera.scale]);
-                ctx.stroke();
-                ctx.restore();
+                ctx.save(); ctx.beginPath(); ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+                for(let i = 1; i < lassoPoints.length; i++) { ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y); }
+                ctx.closePath(); ctx.fillStyle = 'rgba(0, 122, 255, 0.1)'; ctx.fill(); ctx.strokeStyle = '#007AFF'; ctx.lineWidth = 1.5 / camera.scale;
+                ctx.setLineDash([6 / camera.scale, 6 / camera.scale]); ctx.stroke(); ctx.restore();
             }
 
             if (currentTool === 'select') {
@@ -1708,13 +1642,8 @@ function drawHandwritingGuides(c) {
                 toDrawBoxes.forEach(obj => {
                     let box = getBoundingBox(obj);
                     if (box) {
-                        ctx.save();
-                        ctx.strokeStyle = '#007AFF';
-                        ctx.lineWidth = 2 / camera.scale;
-                        ctx.setLineDash([5 / camera.scale, 5 / camera.scale]);
-                        const pad = 8;
-                        ctx.strokeRect(box.left - pad, box.top - pad, (box.right - box.left) + pad * 2, (box.bottom - box.top) + pad * 2);
-                        ctx.restore();
+                        ctx.save(); ctx.strokeStyle = '#007AFF'; ctx.lineWidth = 2 / camera.scale; ctx.setLineDash([5 / camera.scale, 5 / camera.scale]);
+                        const pad = 8; ctx.strokeRect(box.left - pad, box.top - pad, (box.right - box.left) + pad * 2, (box.bottom - box.top) + pad * 2); ctx.restore();
                     }
                 });
             }
@@ -1723,167 +1652,69 @@ function drawHandwritingGuides(c) {
         function finalizeTextInput() {
             if (activeTextInput) {
                 if (activeTextInput.value.trim() !== '') {
-                    const tx = parseFloat(activeTextInput.getAttribute('data-x'));
-                    const ty = parseFloat(activeTextInput.getAttribute('data-y'));
-                    
+                    const tx = parseFloat(activeTextInput.getAttribute('data-x')), ty = parseFloat(activeTextInput.getAttribute('data-y'));
                     sceneObjects.push({ 
-                        type: 'text', 
-                        text: activeTextInput.value, 
-                        x: tx, 
-                        y: ty, 
-                        color: activeTextInput.style.color, 
+                        type: 'text', text: activeTextInput.value, x: tx, y: ty, color: activeTextInput.style.color, 
                         fontSize: parseInt(activeTextInput.getAttribute('data-size')),
-                        isBold: isTextBold,
-                        isItalic: isTextItalic,
-                        isUnderline: isTextUnderline,
-                        isAllCaps: isTextAllCaps,
-                        align: textAlignMode
+                        isBold: isTextBold, isItalic: isTextItalic, isUnderline: isTextUnderline, isAllCaps: isTextAllCaps, align: textAlignMode
                     });
-                    resetUndoCounter();
-                    renderScene();
+                    resetUndoCounter(); renderScene();
                 }
-                activeTextInput.remove();
-                activeTextInput = null;
-                isDraggingText = false;
+                activeTextInput.remove(); activeTextInput = null; isDraggingText = false;
             }
         }
         
         function editExistingText(obj, index) {
             if (obj.varLinked) return; 
+            sceneObjects.splice(index, 1); selectedObject = null; document.getElementById('btn-delete-selected').style.display = 'none';
 
-            sceneObjects.splice(index, 1);
-            selectedObject = null;
-            document.getElementById('btn-delete-selected').style.display = 'none';
-
-            setTool('text');
-            currentTextSize = obj.fontSize;
-            document.getElementById('text-size-input').value = currentTextSize;
-            currentColor = obj.color;
-            isTextBold = obj.isBold;
-            isTextItalic = obj.isItalic;
-            isTextUnderline = obj.isUnderline;
-            isTextAllCaps = obj.isAllCaps;
-            textAlignMode = obj.align || 'left';
-
-            updateFormatButtonsUI();
-            
-            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+            setTool('text'); currentTextSize = obj.fontSize; document.getElementById('text-size-input').value = currentTextSize;
+            currentColor = obj.color; isTextBold = obj.isBold; isTextItalic = obj.isItalic; isTextUnderline = obj.isUnderline; isTextAllCaps = obj.isAllCaps; textAlignMode = obj.align || 'left';
+            updateFormatButtonsUI(); document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
 
             const screenPos = getScreenPos(obj.x, obj.y);
-            createTextInput(obj.x, obj.y, screenPos.x, screenPos.y, obj.text);
-            renderScene();
+            createTextInput(obj.x, obj.y, screenPos.x, screenPos.y, obj.text); renderScene();
         }
 
         function createWatermark() {
             if (activeTextInput) finalizeTextInput();
-            
-            const currentYear = new Date().getFullYear();
-            const watermarkText = `©️ ${currentYear} Monte Kietpawpan`;
-            
-            const clientX = window.innerWidth / 2;
-            const clientY = window.innerHeight / 2;
-            const wPos = getWorldPos(clientX, clientY);
+            const currentYear = new Date().getFullYear(), watermarkText = `©️ ${currentYear} Monte Kietpawpan`;
+            const clientX = window.innerWidth / 2, clientY = window.innerHeight / 2, wPos = getWorldPos(clientX, clientY);
 
-            const previousTool = currentTool;
-            setTool('text');
-            const watermarkSize = 16;
+            const previousTool = currentTool; setTool('text'); const watermarkSize = 16;
             
-            activeTextInput = document.createElement('textarea');
-            activeTextInput.value = watermarkText; 
-            activeTextInput.className = 'movable-text-input';
-            activeTextInput.style.resize = 'none';
-            activeTextInput.style.overflow = 'hidden';
-            activeTextInput.style.whiteSpace = 'pre';
-            activeTextInput.style.lineHeight = '1.2';
-            activeTextInput.rows = 1;
-            
-            activeTextInput.style.left = clientX + 'px';
-            activeTextInput.style.top = clientY + 'px';
-            activeTextInput.style.fontSize = (watermarkSize * camera.scale) + 'px';
-            activeTextInput.style.color = currentColor; 
-            
-            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal';
-            activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
-            activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
-            activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
-            activeTextInput.style.textAlign = textAlignMode;
-            
-            activeTextInput.setAttribute('data-x', wPos.x);
-            activeTextInput.setAttribute('data-y', wPos.y);
-            activeTextInput.setAttribute('data-size', watermarkSize);
-
+            activeTextInput = document.createElement('textarea'); activeTextInput.value = watermarkText; 
+            activeTextInput.className = 'movable-text-input'; activeTextInput.style.resize = 'none'; activeTextInput.style.overflow = 'hidden'; activeTextInput.style.whiteSpace = 'pre'; activeTextInput.style.lineHeight = '1.2'; activeTextInput.rows = 1;
+            activeTextInput.style.left = clientX + 'px'; activeTextInput.style.top = clientY + 'px'; activeTextInput.style.fontSize = (watermarkSize * camera.scale) + 'px'; activeTextInput.style.color = currentColor; 
+            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal'; activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal'; activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none'; activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none'; activeTextInput.style.textAlign = textAlignMode;
+            activeTextInput.setAttribute('data-x', wPos.x); activeTextInput.setAttribute('data-y', wPos.y); activeTextInput.setAttribute('data-size', watermarkSize);
             container.appendChild(activeTextInput);
 
-            const autoResize = () => {
-                activeTextInput.style.height = 'auto';
-                activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
-            };
-            activeTextInput.addEventListener('input', autoResize);
-
-            setTimeout(() => {
-                activeTextInput.focus();
-                autoResize();
-            }, 50);
+            const autoResize = () => { activeTextInput.style.height = 'auto'; activeTextInput.style.height = activeTextInput.scrollHeight + 'px'; };
+            activeTextInput.addEventListener('input', autoResize); setTimeout(() => { activeTextInput.focus(); autoResize(); }, 50);
 
             activeTextInput.addEventListener('pointerdown', (e) => {
-                isDraggingText = true;
-                const rect = activeTextInput.getBoundingClientRect();
-                textDragOffset.x = e.clientX - (rect.left + rect.width / 2);
-                textDragOffset.y = e.clientY - (rect.top + rect.height / 2);
-                e.stopPropagation();
+                isDraggingText = true; const rect = activeTextInput.getBoundingClientRect();
+                textDragOffset.x = e.clientX - (rect.left + rect.width / 2); textDragOffset.y = e.clientY - (rect.top + rect.height / 2); e.stopPropagation();
             });
 
-            activeTextInput.addEventListener('blur', () => {
-                finalizeTextInput();
-                setTool(previousTool);
-            });
+            activeTextInput.addEventListener('blur', () => { finalizeTextInput(); setTool(previousTool); });
         }
 
         function createTextInput(wx, wy, clientX, clientY, existingText = '') {
-            activeTextInput = document.createElement('textarea');
-            activeTextInput.placeholder = 'พิมพ์...';
-            activeTextInput.className = 'movable-text-input';
-            activeTextInput.style.resize = 'none';
-            activeTextInput.style.overflow = 'hidden';
-            activeTextInput.style.whiteSpace = 'pre';
-            activeTextInput.style.lineHeight = '1.2';
-            activeTextInput.rows = 1;
-            activeTextInput.value = existingText;
-            
-            activeTextInput.style.left = clientX + 'px';
-            activeTextInput.style.top = clientY + 'px';
-            activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px';
-            activeTextInput.style.color = currentColor;
-            
-            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal';
-            activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal';
-            activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none';
-            activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none';
-            activeTextInput.style.textAlign = textAlignMode;
-            
-            activeTextInput.setAttribute('data-x', wx);
-            activeTextInput.setAttribute('data-y', wy);
-            activeTextInput.setAttribute('data-size', currentTextSize);
-
+            activeTextInput = document.createElement('textarea'); activeTextInput.placeholder = 'พิมพ์...';
+            activeTextInput.className = 'movable-text-input'; activeTextInput.style.resize = 'none'; activeTextInput.style.overflow = 'hidden'; activeTextInput.style.whiteSpace = 'pre'; activeTextInput.style.lineHeight = '1.2'; activeTextInput.rows = 1; activeTextInput.value = existingText;
+            activeTextInput.style.left = clientX + 'px'; activeTextInput.style.top = clientY + 'px'; activeTextInput.style.fontSize = (currentTextSize * camera.scale) + 'px'; activeTextInput.style.color = currentColor;
+            activeTextInput.style.fontWeight = isTextBold ? 'bold' : 'normal'; activeTextInput.style.fontStyle = isTextItalic ? 'italic' : 'normal'; activeTextInput.style.textDecoration = isTextUnderline ? 'underline' : 'none'; activeTextInput.style.textTransform = isTextAllCaps ? 'uppercase' : 'none'; activeTextInput.style.textAlign = textAlignMode;
+            activeTextInput.setAttribute('data-x', wx); activeTextInput.setAttribute('data-y', wy); activeTextInput.setAttribute('data-size', currentTextSize);
             container.appendChild(activeTextInput);
 
-            const autoResize = () => {
-                activeTextInput.style.height = 'auto';
-                activeTextInput.style.height = activeTextInput.scrollHeight + 'px';
-            };
-            activeTextInput.addEventListener('input', autoResize);
-
-            setTimeout(() => {
-                activeTextInput.focus();
-                autoResize();
-            }, 50);
+            const autoResize = () => { activeTextInput.style.height = 'auto'; activeTextInput.style.height = activeTextInput.scrollHeight + 'px'; };
+            activeTextInput.addEventListener('input', autoResize); setTimeout(() => { activeTextInput.focus(); autoResize(); }, 50);
 
             activeTextInput.addEventListener('pointerdown', (e) => {
-                isDraggingText = true;
-                const rect = activeTextInput.getBoundingClientRect();
-                textDragOffset.x = e.clientX - (rect.left + rect.width / 2);
-                textDragOffset.y = e.clientY - (rect.top + rect.height / 2);
-                e.stopPropagation();
+                isDraggingText = true; const rect = activeTextInput.getBoundingClientRect();
+                textDragOffset.x = e.clientX - (rect.left + rect.width / 2); textDragOffset.y = e.clientY - (rect.top + rect.height / 2); e.stopPropagation();
             });
 
             activeTextInput.addEventListener('blur', finalizeTextInput);
@@ -1894,20 +1725,11 @@ function drawHandwritingGuides(c) {
                 const obj = sceneObjects[i];
                 if (obj.type === 'text') {
                     ctx.font = `${obj.isItalic ? 'italic ' : ''}${obj.isBold ? 'bold ' : ''}${obj.fontSize}px sans-serif`;
-                    let lines = (obj.isAllCaps ? obj.text.toUpperCase() : obj.text).split('\n');
-                    let maxWidth = 0;
-                    lines.forEach(line => {
-                        maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-                    });
-                    let totalHeight = lines.length * (obj.fontSize * 1.2);
-                    
-                    let align = obj.align || 'left';
-                    let textLeft = obj.x;
+                    let lines = (obj.isAllCaps ? obj.text.toUpperCase() : obj.text).split('\n'), maxWidth = 0;
+                    lines.forEach(line => { maxWidth = Math.max(maxWidth, ctx.measureText(line).width); });
+                    let totalHeight = lines.length * (obj.fontSize * 1.2), align = obj.align || 'left', textLeft = obj.x;
                     if (align === 'left' || align === 'center') { textLeft = obj.x - maxWidth / 2; }
-                    
-                    if (wx >= textLeft && wx <= textLeft + maxWidth && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) {
-                        return { index: i, object: obj };
-                    }
+                    if (wx >= textLeft && wx <= textLeft + maxWidth && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) { return { index: i, object: obj }; }
                 }
             }
 
@@ -1917,28 +1739,15 @@ function drawHandwritingGuides(c) {
 
                 if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
                     let hPad = obj.type === 'short-line-h' ? 15 : 0;
-                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) {
-                        return { index: i, object: obj };
-                    }
+                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) { return { index: i, object: obj }; }
                 } else if (obj.type === 'circle') {
-                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) {
-                        return { index: i, object: obj };
-                    }
+                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) { return { index: i, object: obj }; }
                 } else if (['pen', 'arrow', 'eraser'].includes(obj.type)) {
                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                    if (obj.points) {
-                        obj.points.forEach(p => {
-                            minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-                            maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
-                        });
-                    } else if (obj.p1 && obj.p2) {
-                        minX = Math.min(obj.p1.x, obj.p2.x); minY = Math.min(obj.p1.y, obj.p2.y);
-                        maxX = Math.max(obj.p1.x, obj.p2.x); maxY = Math.max(obj.p1.y, obj.p2.y);
-                    }
+                    if (obj.points) { obj.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }); } 
+                    else if (obj.p1 && obj.p2) { minX = Math.min(obj.p1.x, obj.p2.x); minY = Math.min(obj.p1.y, obj.p2.y); maxX = Math.max(obj.p1.x, obj.p2.x); maxY = Math.max(obj.p1.y, obj.p2.y); }
                     const pad = 15;
-                    if (wx >= minX - pad && wx <= maxX + pad && wy >= minY - pad && wy <= maxY + pad) {
-                         return { index: i, object: obj };
-                    }
+                    if (wx >= minX - pad && wx <= maxX + pad && wy >= minY - pad && wy <= maxY + pad) { return { index: i, object: obj }; }
                 }
             }
             return null;
@@ -1947,36 +1756,21 @@ function drawHandwritingGuides(c) {
         container.addEventListener('pointermove', (e) => {
             if (isDraggingText && activeTextInput) {
                 e.preventDefault();
-                
-                const newClientX = e.clientX - textDragOffset.x;
-                const newClientY = e.clientY - textDragOffset.y;
-                
-                activeTextInput.style.left = newClientX + 'px';
-                activeTextInput.style.top = newClientY + 'px';
-                
+                const newClientX = e.clientX - textDragOffset.x, newClientY = e.clientY - textDragOffset.y;
+                activeTextInput.style.left = newClientX + 'px'; activeTextInput.style.top = newClientY + 'px';
                 const wPos = getWorldPos(newClientX, newClientY);
-                activeTextInput.setAttribute('data-x', wPos.x);
-                activeTextInput.setAttribute('data-y', wPos.y);
+                activeTextInput.setAttribute('data-x', wPos.x); activeTextInput.setAttribute('data-y', wPos.y);
             }
         });
 
-        container.addEventListener('pointerup', (e) => {
-            if (isDraggingText) {
-                isDraggingText = false;
-                if (activeTextInput) activeTextInput.focus();
-            }
-        });
+        container.addEventListener('pointerup', (e) => { if (isDraggingText) { isDraggingText = false; if (activeTextInput) activeTextInput.focus(); } });
 
         canvas.addEventListener('dblclick', (e) => {
             if (currentTool !== 'select') return;
             const worldPos = getWorldPos(e.clientX, e.clientY);
             const hit = getHitObject(worldPos.x, worldPos.y);
-
-            if (hit) {
-                const type = hit.object.type;
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(type)) {
-                    openPropertyPanel(hit.object, e.clientX, e.clientY);
-                }
+            if (hit && ['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(hit.object.type)) {
+                openPropertyPanel(hit.object, e.clientX, e.clientY);
             }
         });
 
@@ -1986,15 +1780,11 @@ function drawHandwritingGuides(c) {
                 activeTouchPointers.set(e.pointerId, e);
                 
                 if (activeTouchPointers.size === 1) {
-                    isPanning = true;
-                    startPan = { x: e.clientX, y: e.clientY };
-                    startCam = { x: camera.x, y: camera.y };
+                    isPanning = true; startPan = { x: e.clientX, y: e.clientY }; startCam = { x: camera.x, y: camera.y };
                 } else if (activeTouchPointers.size === 2) {
-                    isPanning = false; 
-                    let pts = Array.from(activeTouchPointers.values());
+                    isPanning = false; let pts = Array.from(activeTouchPointers.values());
                     initialPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
-                    initialScale = camera.scale;
-                    pinchCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
+                    initialScale = camera.scale; pinchCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
                     startCam = { x: camera.x, y: camera.y };
                 }
                 return; 
@@ -2002,167 +1792,91 @@ function drawHandwritingGuides(c) {
 
             if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-            const worldPos = getWorldPos(e.clientX, e.clientY);
-            const wx = worldPos.x;
-            const wy = worldPos.y;
+            const worldPos = getWorldPos(e.clientX, e.clientY), wx = worldPos.x, wy = worldPos.y;
             
             if (activeTextInput && !isDraggingText) {
                 finalizeTextInput();
-                if (currentTool !== 'text' && currentTool !== 'select' && currentTool !== 'equation') return; 
+                if (!['text', 'select', 'equation'].includes(currentTool)) return; 
             }
 
             if (currentTool === 'equation') {
                 const hit = getHitObject(wx, wy);
-                if (hit) {
-                    const type = hit.object.type;
-                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(type)) {
-                        openPropertyPanel(hit.object, e.clientX, e.clientY);
-                    }
+                if (hit && ['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(hit.object.type)) {
+                    openPropertyPanel(hit.object, e.clientX, e.clientY);
                 }
                 return;
             }
 
             if (currentTool === 'select') {
-                const hit = getHitObject(wx, wy);
-                const now = Date.now();
-                
+                const hit = getHitObject(wx, wy), now = Date.now();
                 if (hit && hit.object.type === 'text' && (now - lastClickTime < 400) && lastClickObj === hit.object) {
-                    editExistingText(hit.object, hit.index);
-                    lastClickTime = 0;
-                    lastClickObj = null;
-                    return;
+                    editExistingText(hit.object, hit.index); lastClickTime = 0; lastClickObj = null; return;
                 }
 
                 if (hit) {
-                    lastClickTime = now;
-                    lastClickObj = hit.object;
-                    
+                    lastClickTime = now; lastClickObj = hit.object;
                     if (multiSelectedObjects.includes(hit.object)) {
-                        isDraggingObject = true;
-                        dragStartPoint = { x: wx, y: wy };
+                        isDraggingObject = true; dragStartPoint = { x: wx, y: wy };
                         multiSelectedObjects.forEach(o => snapshotOriginalPosition(o));
-                        sceneObjects.forEach(o => {
-                            if(o.type === 'text' && multiSelectedObjects.includes(o.varLinked)) {
-                                snapshotOriginalPosition(o);
-                            }
-                        });
+                        sceneObjects.forEach(o => { if(o.type === 'text' && multiSelectedObjects.includes(o.varLinked)) snapshotOriginalPosition(o); });
                     } else {
-                        multiSelectedObjects = [];
-                        selectedObject = hit.object;
-                        sceneObjects.splice(hit.index, 1);
-                        sceneObjects.push(selectedObject);
-                        
+                        multiSelectedObjects = []; selectedObject = hit.object; sceneObjects.splice(hit.index, 1); sceneObjects.push(selectedObject);
                         document.getElementById('btn-delete-selected').style.display = 'flex';
-
                         if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle'].includes(selectedObject.type)) {
-                            document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
-                            isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
+                            document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0'); isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
                         }
-
-                        isDraggingObject = true;
-                        dragStartPoint = { x: wx, y: wy };
-                        snapshotOriginalPosition(selectedObject);
+                        isDraggingObject = true; dragStartPoint = { x: wx, y: wy }; snapshotOriginalPosition(selectedObject);
                     }
                 } else {
-                    lastClickTime = 0;
-                    lastClickObj = null;
-                    selectedObject = null;
-                    multiSelectedObjects = [];
-                    document.getElementById('btn-delete-selected').style.display = 'none';
-                    closePropertyPanel();
-                    
-                    isLassoing = true;
-                    lassoPoints = [{x: wx, y: wy}];
+                    lastClickTime = 0; lastClickObj = null; selectedObject = null; multiSelectedObjects = [];
+                    document.getElementById('btn-delete-selected').style.display = 'none'; closePropertyPanel();
+                    isLassoing = true; lassoPoints = [{x: wx, y: wy}];
                 }
-                renderScene();
-                return;
+                renderScene(); return;
             }
 
-            if (currentTool === 'text') {
-                createTextInput(wx, wy, e.clientX, e.clientY);
-            } else if (currentTool === 'pen' || currentTool === 'eraser') {
-                isDrawing = true; 
-                
-                currentPath = { 
-                    type: currentTool, 
-                    color: currentColor, 
-                    baseSize: currentBaseSize, 
-                    points: [{x: wx, y: wy}] 
-                };
-                if (currentTool === 'eraser') {
-                    sceneObjects.push(currentPath);
-                    resetUndoCounter();
-                }
+            if (currentTool === 'text') { createTextInput(wx, wy, e.clientX, e.clientY); } 
+            else if (currentTool === 'pen' || currentTool === 'eraser') {
+                isDrawing = true; currentPath = { type: currentTool, color: currentColor, baseSize: currentBaseSize, points: [{x: wx, y: wy}] };
+                if (currentTool === 'eraser') { sceneObjects.push(currentPath); resetUndoCounter(); }
             } else if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(currentTool)) {
-                let center = getAlignedCenter(wx, wy);
-                activeGuides = center.guides;
-                if (guideTimeout) clearTimeout(guideTimeout);
-                guideTimeout = setTimeout(() => { activeGuides = []; renderScene(); }, 1000);
+                let center = getAlignedCenter(wx, wy); activeGuides = center.guides;
+                if (guideTimeout) clearTimeout(guideTimeout); guideTimeout = setTimeout(() => { activeGuides = []; renderScene(); }, 1000);
 
-                if (currentTool === 'rect') {
-                    sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'oval') {
-                    sceneObjects.push({ type: 'oval', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.OVAL_W/2, y: center.y - SHAPE.OVAL_H/2, w: SHAPE.OVAL_W, h: SHAPE.OVAL_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'diamond') {
-                    sceneObjects.push({ type: 'diamond', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.DIAMOND_W/2, y: center.y - SHAPE.DIAMOND_H/2, w: SHAPE.DIAMOND_W, h: SHAPE.DIAMOND_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'parallelogram') {
-                    sceneObjects.push({ type: 'parallelogram', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.PARA_W/2, y: center.y - SHAPE.PARA_H/2, w: SHAPE.PARA_W, h: SHAPE.PARA_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'cloud') {
-                    sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'valve-h') {
-                    sceneObjects.push({ type: 'valve-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
-                } else if (currentTool === 'valve-v') {
-                    sceneObjects.push({ type: 'valve-v', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
-                } else if (currentTool === 'valve-poly') {
-                    sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'circle') {
-                    sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                } else if (currentTool === 'short-line-h') {
-                    sceneObjects.push({ type: 'short-line-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - 30, y: center.y, w: 60, h: 0, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
-                }
-                resetUndoCounter();
-                renderScene();
+                if (currentTool === 'rect') sceneObjects.push({ type: 'rect', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.RECT_W/2, y: center.y - SHAPE.RECT_H/2, w: SHAPE.RECT_W, h: SHAPE.RECT_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'oval') sceneObjects.push({ type: 'oval', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.OVAL_W/2, y: center.y - SHAPE.OVAL_H/2, w: SHAPE.OVAL_W, h: SHAPE.OVAL_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'diamond') sceneObjects.push({ type: 'diamond', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.DIAMOND_W/2, y: center.y - SHAPE.DIAMOND_H/2, w: SHAPE.DIAMOND_W, h: SHAPE.DIAMOND_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'parallelogram') sceneObjects.push({ type: 'parallelogram', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.PARA_W/2, y: center.y - SHAPE.PARA_H/2, w: SHAPE.PARA_W, h: SHAPE.PARA_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'cloud') sceneObjects.push({ type: 'cloud', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.CLOUD_W/2, y: center.y - SHAPE.CLOUD_H/2, w: SHAPE.CLOUD_W, h: SHAPE.CLOUD_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'valve-h') sceneObjects.push({ type: 'valve-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_W/2, y: center.y - SHAPE.VALVE_H/2, w: SHAPE.VALVE_W, h: SHAPE.VALVE_H }); 
+                else if (currentTool === 'valve-v') sceneObjects.push({ type: 'valve-v', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_H/2, y: center.y - SHAPE.VALVE_W/2, w: SHAPE.VALVE_H, h: SHAPE.VALVE_W }); 
+                else if (currentTool === 'valve-poly') sceneObjects.push({ type: 'valve-poly', color: currentColor, lineWidth: currentBaseSize, x: center.x - SHAPE.VALVE_POLY_W/2, y: center.y - SHAPE.VALVE_POLY_H/2, w: SHAPE.VALVE_POLY_W, h: SHAPE.VALVE_POLY_H, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'circle') sceneObjects.push({ type: 'circle', color: currentColor, lineWidth: currentBaseSize, x: center.x, y: center.y, radius: 50, isDouble: isDoubleCircle, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                else if (currentTool === 'short-line-h') sceneObjects.push({ type: 'short-line-h', color: currentColor, lineWidth: currentBaseSize, x: center.x - 30, y: center.y, w: 60, h: 0, fillColor: isFillLightGray ? '#e0e0e0' : '#ffffff' }); 
+                resetUndoCounter(); renderScene();
             } else if (currentTool.includes('arrow') || currentTool.includes('line')) {
                 isDraggingArrow = true; arrowStartPoint = { x: wx, y: wy };
-                
-                if (currentTool.includes('angled')) {
-                    currentPath = {
-                        type: 'arrow',
-                        pathType: currentTool,
-                        color: currentColor,
-                        lineWidth: currentBaseSize, 
-                        points: [arrowStartPoint]
-                    };
-                }
+                if (currentTool.includes('angled')) { currentPath = { type: 'arrow', pathType: currentTool, color: currentColor, lineWidth: currentBaseSize, points: [arrowStartPoint] }; }
             }
         });
 
         canvas.addEventListener('pointermove', (e) => {
             if (isDraggingText) return;
-
             e.preventDefault();
 
             if (e.pointerType === 'touch') {
                 if (!activeTouchPointers.has(e.pointerId)) return;
                 activeTouchPointers.set(e.pointerId, e);
-                
                 if (activeTouchPointers.size === 1 && isPanning) {
-                    const dx = e.clientX - startPan.x;
-                    const dy = e.clientY - startPan.y;
-                    camera.x = startCam.x + dx;
-                    camera.y = startCam.y + dy;
-                    renderScene();
+                    const dx = e.clientX - startPan.x, dy = e.clientY - startPan.y;
+                    camera.x = startCam.x + dx; camera.y = startCam.y + dy; renderScene();
                 } else if (activeTouchPointers.size === 2) {
                     let pts = Array.from(activeTouchPointers.values());
                     let currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
                     let currentCenter = { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
-                    
-                    let scaleFactor = currentDist / initialPinchDist;
-                    camera.scale = Math.min(Math.max(initialScale * scaleFactor, 0.2), 5); 
-                    
+                    let scaleFactor = currentDist / initialPinchDist; camera.scale = Math.min(Math.max(initialScale * scaleFactor, 0.2), 5); 
                     camera.x = currentCenter.x - ((pinchCenter.x - startCam.x) / initialScale) * camera.scale;
-                    camera.y = currentCenter.y - ((pinchCenter.y - startCam.y) / initialScale) * camera.scale;
-                    renderScene();
+                    camera.y = currentCenter.y - ((pinchCenter.y - startCam.y) / initialScale) * camera.scale; renderScene();
                 }
                 return;
             }
@@ -2172,38 +1886,22 @@ function drawHandwritingGuides(c) {
             const worldPos = getWorldPos(e.clientX, e.clientY);
 
             if (currentTool === 'select') {
-                if (isLassoing) {
-                    lassoPoints.push({x: worldPos.x, y: worldPos.y});
-                    renderScene();
-                    return;
-                }
-
+                if (isLassoing) { lassoPoints.push({x: worldPos.x, y: worldPos.y}); renderScene(); return; }
                 if (isDraggingObject) {
-                    const dx = worldPos.x - dragStartPoint.x;
-                    const dy = worldPos.y - dragStartPoint.y;
-
+                    const dx = worldPos.x - dragStartPoint.x, dy = worldPos.y - dragStartPoint.y;
                     let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
-
                     draggingList.forEach(obj => {
                         if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
-                            obj.x = obj._origX + dx;
-                            obj.y = obj._origY + dy;
+                            obj.x = obj._origX + dx; obj.y = obj._origY + dy;
                         } else {
                             if (obj.points && obj._origPoints) {
-                                for (let i = 0; i < obj.points.length; i++) {
-                                    obj.points[i].x = obj._origPoints[i].x + dx;
-                                    obj.points[i].y = obj._origPoints[i].y + dy;
-                                }
+                                for (let i = 0; i < obj.points.length; i++) { obj.points[i].x = obj._origPoints[i].x + dx; obj.points[i].y = obj._origPoints[i].y + dy; }
                             } else if (obj.p1 && obj._origP1) {
-                                obj.p1.x = obj._origP1.x + dx;
-                                obj.p1.y = obj._origP1.y + dy;
-                                obj.p2.x = obj._origP2.x + dx;
-                                obj.p2.y = obj._origP2.y + dy;
+                                obj.p1.x = obj._origP1.x + dx; obj.p1.y = obj._origP1.y + dy; obj.p2.x = obj._origP2.x + dx; obj.p2.y = obj._origP2.y + dy;
                             }
                         }
                     });
-                    renderScene();
-                    return;
+                    renderScene(); return;
                 }
             }
 
@@ -2212,52 +1910,31 @@ function drawHandwritingGuides(c) {
                 for (let ev of events) {
                     const pos = getWorldPos(ev.clientX || e.clientX, ev.clientY || e.clientY);
                     const lastPt = currentPath.points[currentPath.points.length - 1];
-                    if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) > 2) {
-                        currentPath.points.push({ x: pos.x, y: pos.y });
-                    }
+                    if (!lastPt || Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) > 2) { currentPath.points.push({ x: pos.x, y: pos.y }); }
                 }
-                
                 if (currentTool === 'pen') {
-                    pCtx.setTransform(1, 0, 0, 1, 0, 0); 
-                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
-                    applyCamera(pCtx);
-                    
+                    pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); applyCamera(pCtx);
                     let renderPath = currentPath;
                     if (e.getPredictedEvents && e.pointerType === 'pen') {
                         const predicted = e.getPredictedEvents();
                         if (predicted.length > 0) {
                             renderPath = { ...currentPath, points: [...currentPath.points] };
                             for (let ev of predicted) {
-                                const pos = getWorldPos(ev.clientX, ev.clientY);
-                                const lastPredPt = renderPath.points[renderPath.points.length - 1];
-                                if (!lastPredPt || Math.hypot(pos.x - lastPredPt.x, pos.y - lastPredPt.y) > 2) {
-                                    renderPath.points.push({ x: pos.x, y: pos.y });
-                                }
+                                const pos = getWorldPos(ev.clientX, ev.clientY); const lastPredPt = renderPath.points[renderPath.points.length - 1];
+                                if (!lastPredPt || Math.hypot(pos.x - lastPredPt.x, pos.y - lastPredPt.y) > 2) { renderPath.points.push({ x: pos.x, y: pos.y }); }
                             }
                         }
                     }
                     drawSmoothPath(pCtx, renderPath);
-                } else if (currentTool === 'eraser') {
-                    renderScene();
-                }
-
+                } else if (currentTool === 'eraser') { renderScene(); }
             } else if (isDraggingArrow) {
                 if (currentTool.includes('angled') && currentPath) {
                     currentPath.points.push(worldPos);
-                    
-                    pCtx.setTransform(1, 0, 0, 1, 0, 0); 
-                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
-                    applyCamera(pCtx);
-                    
+                    pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); applyCamera(pCtx);
                     let previewObj = { ...currentPath, points: orthogonalize(currentPath.points, 25) };
-                    if (currentTool.includes('rounded-angled')) {
-                        drawRoundedOrthogonalArrow(pCtx, previewObj, true);
-                    } else {
-                        drawFreehandArrow(pCtx, previewObj, true); 
-                    }
-                } else {
-                    drawPreviewArrow(arrowStartPoint, worldPos);
-                }
+                    if (currentTool.includes('rounded-angled')) { drawRoundedOrthogonalArrow(pCtx, previewObj, true); } 
+                    else { drawFreehandArrow(pCtx, previewObj, true); }
+                } else { drawPreviewArrow(arrowStartPoint, worldPos); }
             }
         });
 
@@ -2267,12 +1944,8 @@ function drawHandwritingGuides(c) {
                 if (activeTouchPointers.size < 2) {
                     if (activeTouchPointers.size === 1) {
                         let remaining = Array.from(activeTouchPointers.values())[0];
-                        startPan = { x: remaining.clientX, y: remaining.clientY };
-                        startCam = { x: camera.x, y: camera.y };
-                        isPanning = true;
-                    } else {
-                        isPanning = false;
-                    }
+                        startPan = { x: remaining.clientX, y: remaining.clientY }; startCam = { x: camera.x, y: camera.y }; isPanning = true;
+                    } else { isPanning = false; }
                 }
                 return;
             }
@@ -2286,68 +1959,36 @@ function drawHandwritingGuides(c) {
                         multiSelectedObjects = [];
                         sceneObjects.forEach(obj => {
                             let box = getBoundingBox(obj);
-                            if (box && box.cx !== undefined && box.cy !== undefined) {
-                                if (isPointInPolygon({x: box.cx, y: box.cy}, lassoPoints)) {
-                                    multiSelectedObjects.push(obj);
-                                }
-                            }
+                            if (box && box.cx !== undefined && box.cy !== undefined) { if (isPointInPolygon({x: box.cx, y: box.cy}, lassoPoints)) { multiSelectedObjects.push(obj); } }
                         });
-
-                        if (multiSelectedObjects.length > 0) {
-                            document.getElementById('btn-delete-selected').style.display = 'flex';
-                        }
+                        if (multiSelectedObjects.length > 0) { document.getElementById('btn-delete-selected').style.display = 'flex'; }
                     }
-                    lassoPoints = [];
-                    renderScene();
-                    return;
+                    lassoPoints = []; renderScene(); return;
                 }
-
                 if (isDraggingObject) {
                     isDraggingObject = false;
                     let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
                     draggingList.forEach(obj => cleanupOriginalPosition(obj));
-                    sceneObjects.forEach(o => {
-                        if(o.type === 'text' && (o.varLinked === selectedObject || multiSelectedObjects.includes(o.varLinked))) {
-                            cleanupOriginalPosition(o);
-                        }
-                    });
+                    sceneObjects.forEach(o => { if(o.type === 'text' && (o.varLinked === selectedObject || multiSelectedObjects.includes(o.varLinked))) { cleanupOriginalPosition(o); } });
                     return;
                 }
             }
 
             if (isDrawing && (currentTool === 'pen' || currentTool === 'eraser')) {
-                if (currentTool === 'pen' && currentPath) {
-                    sceneObjects.push(currentPath);
-                    resetUndoCounter();
-                }
-                pCtx.setTransform(1, 0, 0, 1, 0, 0); 
-                pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
-                renderScene();
+                if (currentTool === 'pen' && currentPath) { sceneObjects.push(currentPath); resetUndoCounter(); }
+                pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); renderScene();
             } else if (isDraggingArrow) {
                 const worldPos = getWorldPos(e.clientX, e.clientY);
-
                 if (currentTool.includes('angled') && currentPath) {
                     currentPath.points = orthogonalize(currentPath.points, 25);
-                    if (currentPath.points.length > 1) {
-                        sceneObjects.push(currentPath);
-                        resetUndoCounter();
-                    }
+                    if (currentPath.points.length > 1) { sceneObjects.push(currentPath); resetUndoCounter(); }
                 } else {
                     let snapped = { p1: arrowStartPoint, p2: worldPos };
-                    if (!currentTool.includes('curved') && !currentTool.includes('circle-')) {
-                        snapped = calculateSnapPoints(arrowStartPoint, worldPos); 
-                    }
-                    sceneObjects.push({ 
-                        type: 'arrow', pathType: currentTool, color: currentColor, 
-                        lineWidth: currentBaseSize, 
-                        p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor 
-                    });
+                    if (!currentTool.includes('curved') && !currentTool.includes('circle-')) { snapped = calculateSnapPoints(arrowStartPoint, worldPos); }
+                    sceneObjects.push({ type: 'arrow', pathType: currentTool, color: currentColor, lineWidth: currentBaseSize, p1: snapped.p1, p2: snapped.p2, curvatureFactor: currentCurvatureFactor });
                     resetUndoCounter();
                 }
-                
-                pCtx.setTransform(1, 0, 0, 1, 0, 0); 
-                pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
-                renderScene();
+                pCtx.setTransform(1, 0, 0, 1, 0, 0); pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); renderScene();
             }
             isDrawing = false; isDraggingArrow = false; currentPath = null; arrowStartPoint = null;
         }
