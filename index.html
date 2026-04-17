@@ -326,25 +326,29 @@
     <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importProject(event)">
 
     <script>
-        // ==========================================
-        // ส่วนการจัดการ Unit Check, Data Model และ Simulation
-        // ==========================================
-        
-        try {
-            math.createUnit('person', { aliases: ['people', 'persons', 'man', 'men'] });
-            math.createUnit('item', { aliases: ['items', 'piece', 'pieces', 'unit', 'units'] });
-            math.createUnit('baht', { aliases: ['thb'] });
-            math.createUnit('mcg', '1 ug');
-            math.createUnit('ton', '1000 kg'); 
-            math.createUnit('tons', '1000 kg');
-            math.createUnit('rai', '1600 m^2');
-            math.createUnit('ngan', '400 m^2');
-            math.createUnit('sqwah', '4 m^2');
-            math.createUnit('Dmnl', '1'); // กำหนดหน่วย Dmnl พื้นฐาน
-        } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
+// ==========================================
+// ส่วนการจัดการ Unit Check, Data Model และ Simulation
+// ==========================================
 
+try {
+    math.createUnit('person', { aliases: ['people', 'persons', 'man', 'men'] });
+    math.createUnit('item', { aliases: ['items', 'piece', 'pieces', 'unit', 'units'] });
+    math.createUnit('baht', { aliases: ['thb'] });
+    math.createUnit('mcg', '1 ug');
+    math.createUnit('ton', '1000 kg'); 
+    math.createUnit('tons', '1000 kg');
+    math.createUnit('rai', '1600 m^2');
+    math.createUnit('ngan', '400 m^2');
+    math.createUnit('sqwah', '4 m^2');
+    math.createUnit('Dmnl', '1'); 
+} catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
+
+math.import({
+    DELAY: function(varName, delayTime) { return 1; }
+}, { override: true });
+   
         let editingObject = null;
-        let simChartInstance = null; // ตัวแปรกราฟ
+        let simChartInstance = null;
         let currentLookupData = [];
         let lookupChartInstance = null;
         
@@ -382,7 +386,6 @@
             return 0;
         }
 
-        // ฟังก์ชันดึงวัตถุด้วยพิกัด
         function getShapeAtPoint(x, y, excludeObj = null) {
             for (let i = sceneObjects.length - 1; i >= 0; i--) {
                 const obj = sceneObjects[i];
@@ -412,7 +415,6 @@
             }
         }
 
-        // ดึงเฉพาะ "ชื่อย่อ" มาเป็น Smart Badges
         function getIncomingVariables(targetObj) {
             let incomingVars = [];
             let targetBox = getShapeBox(targetObj);
@@ -450,7 +452,6 @@
 
         function openPropertyPanel(obj, screenX, screenY) {
             editingObject = obj;
-            // โหลดข้อมูลเข้าฟอร์ม
             propShortNameInput.value = obj.varShortName || '';
             propFullNameInput.value = obj.varFullName || '';
             propIndexInput.value = obj.varIndex || '';
@@ -466,7 +467,6 @@
             propUnitInput.value = obj.varUnit || '';
             propEquationInput.value = obj.varEquation || '';
             
-            // ตรวจสอบชนิดวัตถุเพื่อปรับหน้าจอตั้งค่า
             if (obj.type === 'rect') {
                 propInitialRow.style.display = 'block';
                 propInitialInput.value = obj.varInitial || '';
@@ -724,7 +724,6 @@
             const tEnd = parseFloat(document.getElementById('sim-end').value) || 10;
             const dt = parseFloat(document.getElementById('sim-dt').value) || 0.25;
 
-            // 1. ดึงตัวแปรทั้งหมดออกจากระบบ
             let variables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
             let stocks = variables.filter(v => v.type === 'rect');
             let auxiliaries = variables.filter(v => v.type !== 'rect');
@@ -732,87 +731,100 @@
             let history = { time: [] };
             variables.forEach(v => history[v.varShortName] = []);
 
-            // 2. คอมไพล์สมการทั้งหมดล่วงหน้าเพื่อประสิทธิภาพ
             let compiled = {};
             variables.forEach(v => {
-                try {
-                    compiled[v.varShortName] = math.compile(v.varEquation || '0');
-                } catch(e) {
-                    compiled[v.varShortName] = math.compile('0');
-                }
+                try { compiled[v.varShortName] = math.compile(v.varEquation || '0'); } 
+                catch(e) { compiled[v.varShortName] = math.compile('0'); }
             });
 
-            // 3. กำหนดค่าเริ่มต้นของระบบ (Scope)
+            const createDelayFunc = (scope) => {
+                return function(varName, delayTime) {
+                    let targetTime = scope.Time - delayTime; 
+                    if (history.time.length === 0 || targetTime < history.time[0]) {
+                        return 0;
+                    }
+                    for (let i = history.time.length - 1; i >= 0; i--) {
+                        if (history.time[i] <= targetTime + 0.0001) {
+                            return history[varName] ? history[varName][i] : 0;
+                        }
+                    }
+                    return 0;
+                };
+            };
+
             let currentScope = { Time: tStart };
-            
-            // เซ็ตค่าตัวแปร Auxiliaries เป็น 0 ชั่วคราวป้องกัน Error undefined
+            currentScope.DELAY = createDelayFunc(currentScope);
+
             auxiliaries.forEach(aux => currentScope[aux.varShortName] = 0);
             
-            // ประเมินค่าเริ่มต้นของ Stock
             stocks.forEach(s => {
-                try {
-                    currentScope[s.varShortName] = math.evaluate(s.varInitial || '0', currentScope);
-                } catch(e) {
-                    currentScope[s.varShortName] = 0;
-                }
+                try { currentScope[s.varShortName] = math.evaluate(s.varInitial || '0', currentScope); } 
+                catch(e) { currentScope[s.varShortName] = 0; }
             });
 
-            // 4. ลูปหลักจำลองตามเวลา (Euler Integration)
-            for(let t = tStart; t <= tEnd + (dt/10); t += dt) {
-                currentScope.Time = t;
-
-                // วนลูปคำนวณ Auxiliaries จนกว่าค่าจะนิ่ง (แก้ปัญหาลำดับการคำนวณ)
+            function evaluateAuxiliaries(scope) {
                 for(let pass = 0; pass < auxiliaries.length + 1; pass++) {
                     auxiliaries.forEach(aux => {
                         try {
-                            let evalResult = compiled[aux.varShortName].evaluate(currentScope);
-                            let val = evalResult;
-                            if (evalResult && evalResult.type === 'Unit') {
-                                val = evalResult.toNumber();
-                            }
-                            
-                            if (aux.isLookup && aux.lookupData) {
-                                currentScope[aux.varShortName] = interpolateLookup(val, aux.lookupData);
-                            } else {
-                                currentScope[aux.varShortName] = val;
-                            }
+                            let evalResult = compiled[aux.varShortName].evaluate(scope);
+                            let val = evalResult && evalResult.type === 'Unit' ? evalResult.toNumber() : evalResult;
+                            scope[aux.varShortName] = (aux.isLookup && aux.lookupData) ? interpolateLookup(val, aux.lookupData) : val;
                         } catch(e) {} 
                     });
                 }
+            }
 
-                // บันทึกประวัติศาสตร์เวลาปัจจุบัน
+            function getRates(scope) {
+                evaluateAuxiliaries(scope);
+                let rates = {};
+                stocks.forEach(s => {
+                    try {
+                        let netFlow = compiled[s.varShortName].evaluate(scope);
+                        rates[s.varShortName] = netFlow && netFlow.type === 'Unit' ? netFlow.toNumber() : netFlow;
+                    } catch(e) { rates[s.varShortName] = 0; }
+                });
+                return rates;
+            }
+
+            for(let t = tStart; t <= tEnd + (dt/10); t += dt) {
+                currentScope.Time = t;
+
+                evaluateAuxiliaries(currentScope);
+
                 history.time.push(parseFloat(t.toFixed(4)));
                 variables.forEach(v => {
                     history[v.varShortName].push(currentScope[v.varShortName] || 0);
                 });
 
-                // คำนวณอัตราการเปลี่ยนแปลงสุทธิของ Stock แล้วนำไปบวกอัปเดตในรอบถัดไป
-                let nextStockValues = {};
-                stocks.forEach(s => {
-                    try {
-                        let netFlow = compiled[s.varShortName].evaluate(currentScope);
-                        let val = netFlow;
-                        if (netFlow && netFlow.type === 'Unit') val = netFlow.toNumber();
-                        nextStockValues[s.varShortName] = currentScope[s.varShortName] + (val * dt);
-                    } catch(e) {
-                        nextStockValues[s.varShortName] = currentScope[s.varShortName];
-                    }
-                });
+                let k1 = getRates(currentScope);
 
-                // นำค่าใหม่ใส่กลับเข้า Scope เตรียมรันลูป dt ถัดไป
+                let scopeK2 = { ...currentScope, Time: t + dt / 2 };
+                scopeK2.DELAY = createDelayFunc(scopeK2);
+                stocks.forEach(s => scopeK2[s.varShortName] = currentScope[s.varShortName] + (k1[s.varShortName] * dt / 2));
+                let k2 = getRates(scopeK2);
+
+                let scopeK3 = { ...currentScope, Time: t + dt / 2 };
+                scopeK3.DELAY = createDelayFunc(scopeK3);
+                stocks.forEach(s => scopeK3[s.varShortName] = currentScope[s.varShortName] + (k2[s.varShortName] * dt / 2));
+                let k3 = getRates(scopeK3);
+
+                let scopeK4 = { ...currentScope, Time: t + dt };
+                scopeK4.DELAY = createDelayFunc(scopeK4);
+                stocks.forEach(s => scopeK4[s.varShortName] = currentScope[s.varShortName] + (k3[s.varShortName] * dt));
+                let k4 = getRates(scopeK4);
+
                 stocks.forEach(s => {
-                    currentScope[s.varShortName] = nextStockValues[s.varShortName];
+                    let avgRate = (k1[s.varShortName] + 2 * k2[s.varShortName] + 2 * k3[s.varShortName] + k4[s.varShortName]) / 6;
+                    currentScope[s.varShortName] = currentScope[s.varShortName] + (avgRate * dt);
                 });
             }
 
-            // 5. นำไปสร้างกราฟด้วย Chart.js
             renderSimulationChart(history, variables);
         }
 
         function renderSimulationChart(history, variables) {
             const ctxChart = document.getElementById('sim-chart').getContext('2d');
             
-            // สร้างชุดสีสวยๆ วนใช้งาน
             const colors = ['#FF3B30', '#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#FFCC00'];
 
             const datasets = variables.map((v, i) => {
@@ -820,16 +832,16 @@
                     label: v.varShortName + (v.varUnit ? ` (${v.varUnit})` : ''),
                     data: history[v.varShortName],
                     borderColor: colors[i % colors.length],
-                    backgroundColor: colors[i % colors.length] + '33', // เติมความโปร่งใสให้สี
+                    backgroundColor: colors[i % colors.length] + '33',
                     fill: false,
-                    tension: 0.2, // ความโค้งของเส้น
+                    tension: 0.2,
                     pointRadius: 2,
                     borderWidth: 2
                 };
             });
 
             if (simChartInstance) {
-                simChartInstance.destroy(); // ลบกราฟเดิมทิ้งก่อนวาดใหม่
+                simChartInstance.destroy();
             }
 
             simChartInstance = new Chart(ctxChart, {
