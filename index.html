@@ -70,7 +70,7 @@
             font-family: sans-serif;
             width: 320px; 
         }
-        #property-panel h3 { margin: 0 0 12px 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333; }
+        #property-panel h3 { margin: 0 0 12px 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333; cursor: move; user-select: none; }
         .prop-row { margin-bottom: 12px; }
         .prop-row label { display: block; font-size: 14px; color: #444; margin-bottom: 5px; font-weight: bold; }
         .prop-row input, .prop-row select { 
@@ -1729,7 +1729,7 @@
                     lines.forEach(line => { maxWidth = Math.max(maxWidth, ctx.measureText(line).width); });
                     let totalHeight = lines.length * (obj.fontSize * 1.2), align = obj.align || 'left', textLeft = obj.x;
                     if (align === 'left' || align === 'center') { textLeft = obj.x - maxWidth / 2; }
-                    if (wx >= textLeft && wx <= textLeft + maxWidth && wy >= obj.y - totalHeight / 2 && wy <= obj.y + totalHeight / 2) { return { index: i, object: obj }; }
+                    if (wx >= textLeft - 5 && wx <= textLeft + maxWidth + 5 && wy >= obj.y - totalHeight / 2 - 5 && wy <= obj.y + totalHeight / 2 + 5) { return { index: i, object: obj }; }
                 }
             }
 
@@ -1738,15 +1738,16 @@
                 if (obj.type === 'text') continue; 
 
                 if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
-                    let hPad = obj.type === 'short-line-h' ? 15 : 0;
-                    if (wx >= obj.x && wx <= obj.x + obj.w && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) { return { index: i, object: obj }; }
+                    let hPad = obj.type === 'short-line-h' ? 25 : 10;
+                    let wPad = 10;
+                    if (wx >= obj.x - wPad && wx <= obj.x + obj.w + wPad && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) { return { index: i, object: obj }; }
                 } else if (obj.type === 'circle') {
-                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius) { return { index: i, object: obj }; }
+                    if (Math.hypot(wx - obj.x, wy - obj.y) <= obj.radius + 15) { return { index: i, object: obj }; }
                 } else if (['pen', 'arrow', 'eraser'].includes(obj.type)) {
                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                     if (obj.points) { obj.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }); } 
                     else if (obj.p1 && obj.p2) { minX = Math.min(obj.p1.x, obj.p2.x); minY = Math.min(obj.p1.y, obj.p2.y); maxX = Math.max(obj.p1.x, obj.p2.x); maxY = Math.max(obj.p1.y, obj.p2.y); }
-                    const pad = 15;
+                    const pad = 20;
                     if (wx >= minX - pad && wx <= maxX + pad && wy >= minY - pad && wy <= maxY + pad) { return { index: i, object: obj }; }
                 }
             }
@@ -1769,8 +1770,14 @@
             if (currentTool !== 'select') return;
             const worldPos = getWorldPos(e.clientX, e.clientY);
             const hit = getHitObject(worldPos.x, worldPos.y);
-            if (hit && ['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(hit.object.type)) {
-                openPropertyPanel(hit.object, e.clientX, e.clientY);
+            if (hit) {
+                let targetObj = hit.object;
+                if (targetObj.type === 'text' && targetObj.varLinked) {
+                    targetObj = targetObj.varLinked;
+                }
+                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(targetObj.type)) {
+                    openPropertyPanel(targetObj, e.clientX, e.clientY);
+                }
             }
         });
 
@@ -1801,8 +1808,14 @@
 
             if (currentTool === 'equation') {
                 const hit = getHitObject(wx, wy);
-                if (hit && ['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(hit.object.type)) {
-                    openPropertyPanel(hit.object, e.clientX, e.clientY);
+                if (hit) {
+                    let targetObj = hit.object;
+                    if (targetObj.type === 'text' && targetObj.varLinked) {
+                        targetObj = targetObj.varLinked;
+                    }
+                    if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(targetObj.type)) {
+                        openPropertyPanel(targetObj, e.clientX, e.clientY);
+                    }
                 }
                 return;
             }
@@ -1999,6 +2012,40 @@
         [canvas, previewCanvas].forEach(c => {
             c.addEventListener('touchstart', e => { e.preventDefault(); }, { passive: false });
             c.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
+        });
+
+        // ==========================================
+        // ระบบลากหน้าต่าง Property Panel (Draggable)
+        // ==========================================
+        const propPanelTitle = document.getElementById('prop-panel-title');
+        let isDraggingPanel = false;
+        let panelDragOffset = { x: 0, y: 0 };
+
+        propPanelTitle.addEventListener('pointerdown', (e) => {
+            isDraggingPanel = true;
+            propPanelTitle.style.cursor = 'grabbing';
+            const rect = propPanel.getBoundingClientRect();
+            panelDragOffset.x = e.clientX - rect.left;
+            panelDragOffset.y = e.clientY - rect.top;
+            e.preventDefault(); 
+        });
+
+        document.addEventListener('pointermove', (e) => {
+            if (!isDraggingPanel) return;
+            e.preventDefault();
+            let newLeft = e.clientX - panelDragOffset.x;
+            let newTop = e.clientY - panelDragOffset.y;
+            newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - propPanel.offsetWidth));
+            newTop = Math.max(0, Math.min(newTop, window.innerHeight - propPanel.offsetHeight));
+            propPanel.style.left = newLeft + 'px';
+            propPanel.style.top = newTop + 'px';
+        });
+
+        document.addEventListener('pointerup', () => {
+            if (isDraggingPanel) {
+                isDraggingPanel = false;
+                propPanelTitle.style.cursor = 'move';
+            }
         });
     </script>
 </body>
