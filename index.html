@@ -569,21 +569,20 @@ math.import({
 
 
 
-// ค้นหาบล็อกนี้ในฟังก์ชัน saveProperties()
-if (editingObject.type === 'circle' || editingObject.type === 'oval') {
-    editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
-    if (editingObject.isLookup) {
-        if (!editingObject.lookupData) {
-            editingObject.lookupData = [{x: 0, y: 1}, {x: 1, y: 1}]; 
-        }
-        // เพิ่มโค้ด 4 บรรทัดนี้เพื่อต่อท้าย T อัตโนมัติ
-        if (editingObject.varShortName) {
-            editingObject.varFullName = editingObject.varShortName + "T";
-            propFullNameInput.value = editingObject.varFullName;
-        }
-    }
-}
 
+
+// ... (โค้ดด้านบนของ saveProperties() เหมือนเดิม) ...
+
+                if (editingObject.type === 'circle' || editingObject.type === 'oval') {
+                    editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
+                    if (editingObject.isLookup && !editingObject.lookupData) {
+                        editingObject.lookupData = [{x: 0, y: 1}, {x: 1, y: 1}]; 
+                    }
+                    if (editingObject.isLookup && editingObject.varShortName) {
+                        editingObject.varFullName = editingObject.varShortName + "T";
+                        propFullNameInput.value = editingObject.varFullName;
+                    }
+                }
 
                 let combinedTextLines = [];
                 if (editingObject.varShortName) combinedTextLines.push(editingObject.varShortName);
@@ -591,9 +590,22 @@ if (editingObject.type === 'circle' || editingObject.type === 'oval') {
                 if (editingObject.varIndex) combinedTextLines.push(editingObject.varIndex);
                 let combinedText = combinedTextLines.join('\n');
                 
-                if(combinedText && editingObject.type !== 'text'){
-                    sceneObjects = sceneObjects.filter(o => !(o.type === 'text' && o.varLinked === editingObject));
+                // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
+                // ลบข้อความเดิมทั้งหมดที่ผูกกับรูปทรงนี้ทิ้งแบบครอบคลุม ป้องกันการซ้อนทับ
+                sceneObjects = sceneObjects.filter(o => {
+                    if (o.type !== 'text' || !o.varLinked) return true;
                     
+                    let isSameRef = (o.varLinked === editingObject);
+                    let isSameValue = (o.varLinked.x === editingObject.x && 
+                                       o.varLinked.y === editingObject.y && 
+                                       o.varLinked.varShortName === editingObject.varShortName);
+                    
+                    if (isSameRef || isSameValue) return false; // เจอข้อความเก่า ให้ลบทิ้ง
+                    return true;
+                });
+
+                // วาดข้อความใหม่
+                if(combinedText && editingObject.type !== 'text'){
                     let box = getShapeBox(editingObject);
                     if(box){
                          sceneObjects.push({ 
@@ -608,13 +620,14 @@ if (editingObject.type === 'circle' || editingObject.type === 'oval') {
                             varLinked: editingObject 
                         });
                     }
-                } else if (!combinedText) {
-                    sceneObjects = sceneObjects.filter(o => !(o.type === 'text' && o.varLinked === editingObject));
                 }
+                // --- สิ้นสุดส่วนที่แก้ไขใหม่ ---
+
                 renderScene();
             }
             closePropertyPanel();
         }
+
 
         // ==========================================
         // ส่วนจัดการ Lookup Panel
@@ -1428,34 +1441,6 @@ function cycleSelection() {
             link.download = `${fileName}.json`;
             link.click();
             URL.revokeObjectURL(url);
-        }
-
-        function importProject(event) {
-            const input = event.target;
-            const file = input.files[0];
-            if (!file) return;
-
-            if (activeTextInput) finalizeTextInput();
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.objects && data.camera) {
-                        sceneObjects = data.objects;
-                        camera = data.camera;
-                        selectedObject = null;
-                        multiSelectedObjects = [];
-                        document.getElementById('btn-delete-selected').style.display = 'none';
-                        closePropertyPanel();
-                        resetUndoCounter();
-                        renderScene();
-                    } else { alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้'); }
-                } catch (err) { alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย'); } 
-                finally { input.value = ''; }
-            };
-            reader.onerror = () => { alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้'); input.value = ''; };
-            reader.readAsText(file);
         }
 
         function saveImage() {
