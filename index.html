@@ -2374,6 +2374,50 @@ for (const [varName, data] of Object.entries(modelData)) {
                 propPanelTitle.style.cursor = 'move';
             }
         });
+
+function importProject(event) {
+    const input = event.target;
+    const file = input.files[0];
+    if (!file) return;
+
+    if (activeTextInput) finalizeTextInput();
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.objects && data.camera) {
+                sceneObjects = data.objects;
+
+                // เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
+                sceneObjects.forEach(obj => {
+                    if (obj.type === 'text' && obj.varLinked) {
+                        let linkedShape = sceneObjects.find(o =>
+                            o.type !== 'text' &&
+                            o.varShortName === obj.varLinked.varShortName &&
+                            o.x === obj.varLinked.x &&
+                            o.y === obj.varLinked.y
+                        );
+                        if (linkedShape) {
+                            obj.varLinked = linkedShape;
+                        }
+                    }
+                });
+
+                camera = data.camera;
+                selectedObject = null;
+                multiSelectedObjects = [];
+                document.getElementById('btn-delete-selected').style.display = 'none';
+                closePropertyPanel();
+                resetUndoCounter();
+                renderScene();
+            } else { alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้'); }
+        } catch (err) { alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย'); } 
+        finally { input.value = ''; }
+    };
+    reader.onerror = () => { alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้'); input.value = ''; };
+    reader.readAsText(file);
+}
     </script>
 </body>
 </html>
