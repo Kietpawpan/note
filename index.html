@@ -590,21 +590,28 @@ math.import({
                 if (editingObject.varIndex) combinedTextLines.push(editingObject.varIndex);
                 let combinedText = combinedTextLines.join('\n');
                 
-                // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
+ 		 // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
                 // ลบข้อความเดิมทั้งหมดที่ผูกกับรูปทรงนี้ทิ้งแบบครอบคลุม ป้องกันการซ้อนทับ
                 sceneObjects = sceneObjects.filter(o => {
                     if (o.type !== 'text' || !o.varLinked) return true;
                     
+                    // 1. ตรวจสอบ Reference ตรงกัน
                     let isSameRef = (o.varLinked === editingObject);
-                    let isSameValue = (o.varLinked.x === editingObject.x && 
-                                       o.varLinked.y === editingObject.y && 
-                                       o.varLinked.varShortName === editingObject.varShortName);
                     
-                    if (isSameRef || isSameValue) return false; // เจอข้อความเก่า ให้ลบทิ้ง
+                    // 2. ตรวจสอบชื่อตัวแปรตรงกัน (สำคัญมาก เพราะชื่อย่อต้องไม่ซ้ำกันอยู่แล้ว)
+                    let isSameName = (editingObject.varShortName && o.varLinked.varShortName === editingObject.varShortName);
+                    
+                    // 3. ตรวจสอบตำแหน่งพิกัดแบบอนุโลมค่าทศนิยมที่คลาดเคลื่อน (ไม่เกิน 2px)
+                    let dx = Math.abs((o.varLinked.x || 0) - (editingObject.x || 0));
+                    let dy = Math.abs((o.varLinked.y || 0) - (editingObject.y || 0));
+                    let isSamePos = (dx < 2 && dy < 2);
+                    
+                    if (isSameRef || isSameName || isSamePos) return false; // เจอข้อความเก่า ให้ลบทิ้ง
                     return true;
                 });
 
                 // วาดข้อความใหม่
+
                 if(combinedText && editingObject.type !== 'text'){
                     let box = getShapeBox(editingObject);
                     if(box){
@@ -1211,6 +1218,7 @@ window.addEventListener('keydown', (e) => {
         if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return; 
         deleteSelected();
     }
+
 });
 
 
@@ -2451,20 +2459,27 @@ function importProject(event) {
             if (data.objects && data.camera) {
                 sceneObjects = data.objects;
 
-                // เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
+
+		// เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
                 sceneObjects.forEach(obj => {
                     if (obj.type === 'text' && obj.varLinked) {
-                        let linkedShape = sceneObjects.find(o =>
-                            o.type !== 'text' &&
-                            o.varShortName === obj.varLinked.varShortName &&
-                            o.x === obj.varLinked.x &&
-                            o.y === obj.varLinked.y
-                        );
+                        let linkedShape = sceneObjects.find(o => {
+                            if (o.type === 'text') return false;
+                            
+                            // เชื่อม Reference โดยดูจากชื่อย่อตรงกัน หรือ พิกัดใกล้เคียงกัน (เผื่อระยะคลาดเคลื่อน 5px)
+                            let matchName = (o.varShortName && o.varShortName === obj.varLinked.varShortName);
+                            let dx = Math.abs(o.x - obj.varLinked.x);
+                            let dy = Math.abs(o.y - obj.varLinked.y);
+                            let matchPos = (dx < 5 && dy < 5);
+                            
+                            return matchName || matchPos;
+                        });
                         if (linkedShape) {
                             obj.varLinked = linkedShape;
                         }
                     }
                 });
+
 
                 camera = data.camera;
                 selectedObject = null;
