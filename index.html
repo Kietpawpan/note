@@ -226,6 +226,7 @@
     <div id="toolbar">
         <div class="tool-group">
             <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (ดับเบิลคลิกรูปทรงเพื่อตั้งค่า/ตรวจหน่วย)">👆</button>
+	    <button id="btn-cycle-select" class="action-btn" onclick="cycleSelection()" title="สลับการเลือกวัตถุ (กด Tab)" style="margin-left: 2px;">🔄</button>
             <button id="btn-equation" class="tool-btn" onclick="setTool('equation')" title="ตั้งค่าสมการ (เลือกเครื่องมือนี้แล้วแตะที่รูปทรง)" style="margin-left: 2px;">🧮</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
@@ -1183,12 +1184,22 @@ for (const [varName, data] of Object.entries(modelData)) {
             renderScene();
         }
 
-        window.addEventListener('keydown', (e) => {
-            if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedObject || multiSelectedObjects.length > 0) && currentTool === 'select') {
-                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return; 
-                deleteSelected();
-            }
-        });
+
+window.addEventListener('keydown', (e) => {
+    // เพิ่มการดักจับปุ่ม Tab
+    if (e.key === 'Tab') {
+        e.preventDefault(); // ป้องกันไม่ให้เบราว์เซอร์เลื่อนโฟกัสของหน้าเว็บ
+        cycleSelection();
+        return;
+    }
+
+    // ส่วนประกอบเดิมของการลบวัตถุ
+    if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedObject || multiSelectedObjects.length > 0) && currentTool === 'select') {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return; 
+        deleteSelected();
+    }
+});
+
 
         function applyCamera(context) {
             const dpr = window.devicePixelRatio || 1;
@@ -1253,6 +1264,33 @@ for (const [varName, data] of Object.entries(modelData)) {
                 renderScene();
             }
         }
+
+function cycleSelection() {
+    // ถ้าไม่มีวัตถุบนกระดานให้ข้ามไป
+    if (sceneObjects.length === 0) return;
+
+    if (activeTextInput) finalizeTextInput();
+    setTool('select');
+
+    // นำวัตถุที่อยู่ล่างสุด (ลำดับที่ 0) ดึงขึ้นมาไว้บนสุด (ท้าย array)
+    let targetObj = sceneObjects[0];
+    sceneObjects.splice(0, 1);
+    sceneObjects.push(targetObj);
+
+    selectedObject = targetObj;
+    multiSelectedObjects = [];
+    document.getElementById('btn-delete-selected').style.display = 'flex';
+
+    // อัปเดตสถานะปุ่มเทสีเทาให้ตรงกับวัตถุที่เลือกใหม่
+    if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(selectedObject.type)) {
+        document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
+        isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
+    }
+
+    // วาดหน้าจอใหม่เพื่อแสดงกรอบการเลือก
+    renderScene();
+}
+
 
         function toggleTextAlign(btn) {
             textAlignMode = textAlignMode === 'left' ? 'center' : 'left';
