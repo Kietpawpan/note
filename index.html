@@ -566,12 +566,23 @@ math.import({
                     editingObject.varInitial = propInitialInput.value.trim();
                 }
 
-                if (editingObject.type === 'circle' || editingObject.type === 'oval') {
-                    editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
-                    if (editingObject.isLookup && !editingObject.lookupData) {
-                        editingObject.lookupData = [{x: 0, y: 1}, {x: 1, y: 1}]; 
-                    }
-                }
+
+
+// ค้นหาบล็อกนี้ในฟังก์ชัน saveProperties()
+if (editingObject.type === 'circle' || editingObject.type === 'oval') {
+    editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
+    if (editingObject.isLookup) {
+        if (!editingObject.lookupData) {
+            editingObject.lookupData = [{x: 0, y: 1}, {x: 1, y: 1}]; 
+        }
+        // เพิ่มโค้ด 4 บรรทัดนี้เพื่อต่อท้าย T อัตโนมัติ
+        if (editingObject.varShortName) {
+            editingObject.varFullName = editingObject.varShortName + "T";
+            propFullNameInput.value = editingObject.varFullName;
+        }
+    }
+}
+
 
                 let combinedTextLines = [];
                 if (editingObject.varShortName) combinedTextLines.push(editingObject.varShortName);
@@ -1912,11 +1923,39 @@ for (const [varName, data] of Object.entries(modelData)) {
                                 startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
                             }
 
-                            linesToDraw.forEach((item, index) => {
-                                ctx.textAlign = item.align;
-                                let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
-                                let lineY = startY + (index * lineHeight); ctx.fillText(textStr, item.x, lineY);
-                            });
+
+linesToDraw.forEach((item, index) => {
+    ctx.textAlign = item.align;
+    let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
+    let lineY = startY + (index * lineHeight); 
+    ctx.fillText(textStr, item.x, lineY);
+
+    // เพิ่มบล็อกนี้เพื่อวาดเส้นใต้สำหรับตัวแปรแบบ Lookup
+    if (parentShape.isLookup && (item.text === parentShape.varShortName || item.text === parentShape.varFullName)) {
+        let metrics = ctx.measureText(textStr);
+        let textWidth = metrics.width;
+        let yOffset = obj.fontSize * 0.4;
+        let drawX = item.x;
+        
+        if (item.align === 'left') {
+            drawX = item.x;
+        } else if (item.align === 'right') {
+            drawX = item.x - textWidth;
+        } else {
+            drawX = item.x - textWidth / 2;
+        }
+
+        ctx.beginPath();
+        ctx.strokeStyle = obj.color;
+        // กำหนดความหนาเส้นใต้ให้เท่ากับเส้นขอบวงกลม
+        ctx.lineWidth = parentShape.lineWidth || 4; 
+        ctx.moveTo(drawX, lineY + yOffset);
+        ctx.lineTo(drawX + textWidth, lineY + yOffset);
+        ctx.stroke();
+    }
+});
+
+
                         }
                         return; 
                     }
