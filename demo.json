@@ -1,0 +1,250 @@
+{
+  "version": "1.3",
+  "timestamp": "2026-04-17T09:14:59.961Z",
+  "camera": {
+    "x": 0,
+    "y": 0,
+    "scale": 1
+  },
+  "objects": [
+    {
+      "type": "rect",
+      "color": "#000000",
+      "lineWidth": 2,
+      "x": 532.4444580078125,
+      "y": 264,
+      "w": 160,
+      "h": 80,
+      "fillColor": "#ffffff",
+      "varShortName": "P",
+      "varFullName": "Pop",
+      "varIndex": "",
+      "varAlign": "center",
+      "varUnit": "man",
+      "varEquation": "B",
+      "varInitial": "10"
+    },
+    {
+      "type": "cloud",
+      "color": "#000000",
+      "lineWidth": 2,
+      "x": 577.4444580078125,
+      "y": 529.5,
+      "w": 70,
+      "h": 45,
+      "fillColor": "#ffffff"
+    },
+    {
+      "type": "arrow",
+      "pathType": "angled-arrow-solid",
+      "color": "#000000",
+      "lineWidth": 2,
+      "points": [
+        {
+          "x": 612.4444580078125,
+          "y": 530.666748046875
+        },
+        {
+          "x": 612.4444580078125,
+          "y": 341.3333435058594
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "P\nPop",
+      "x": 612.4444580078125,
+      "y": 304,
+      "color": "#000",
+      "fontSize": 16,
+      "isBold": true,
+      "align": "center",
+      "varLinked": {
+        "type": "rect",
+        "color": "#000000",
+        "lineWidth": 2,
+        "x": 532.4444580078125,
+        "y": 264,
+        "w": 160,
+        "h": 80,
+        "fillColor": "#ffffff",
+        "varShortName": "P",
+        "varFullName": "Pop",
+        "varIndex": "",
+        "varAlign": "center",
+        "varUnit": "man",
+        "varEquation": "B",
+        "varInitial": "10"
+      }
+    },
+    {
+      "type": "short-line-h",
+      "color": "#000000",
+      "lineWidth": 2,
+      "x": 757.5555419921875,
+      "y": 427.5555114746094,
+      "w": 60,
+      "h": 0,
+      "fillColor": "#ffffff",
+      "varShortName": "F",
+      "varFullName": "Fraction",
+      "varIndex": "",
+      "varAlign": "center",
+      "varTextPos": "above",
+      "varUnit": "1/day",
+      "varEquation": "0.1"
+    },
+    {
+      "type": "text",
+      "text": "B\nrate",
+      "x": 552.0000610351562,
+      "y": 427.5555114746094,
+      "color": "#000",
+      "fontSize": 16,
+      "isBold": true,
+      "align": "center",
+      "varLinked": {
+        "type": "valve-poly",
+        "color": "#000000",
+        "lineWidth": 2,
+        "x": 472.00006103515625,
+        "y": 387.5555114746094,
+        "w": 160,
+        "h": 80,
+        "fillColor": "#ffffff",
+        "varShortName": "B",
+        "varFullName": "rate",
+        "varIndex": "",
+        "varAlign": "center",
+        "varUnit": "man/day",
+        "varEquation": "DELAY(\"F\",10)"
+      }
+    },
+    {
+      "type": "arrow",
+      "pathType": "circle-arrow-dashed",
+      "color": "#000000",
+      "lineWidth": 2,
+      "p1": {
+        "x": 529.7777709960938,
+        "y": 302.22222900390625
+      },
+      "p2": {
+        "x": 506.6666564941406,
+        "y": 384.8888854980469
+      },
+      "curvatureFactor": 50
+    },
+    {
+      "type": "text",
+      "text": "P\nPop",
+      "x": 612.4444580078125,
+      "y": 304,
+      "color": "#000",
+      "fontSize": 16,
+      "isBold": true,
+      "align": "center",
+      "varLinked": {
+        "type": "rect",
+        "color": "#000000",
+        "lineWidth": 2,
+        "x": 532.4444580078125,
+        "y": 264,
+        "w": 160,
+        "h": 80,
+        "fillColor": "#ffffff",
+        "varShortName": "P",
+        "varFullName": "Pop",
+        "varIndex": "",
+        "varAlign": "center",
+        "varUnit": "man",
+        "varEquation": "B",
+        "varInitial": "10"
+      }
+    },
+    {
+      "type": "arrow",
+      "pathType": "circle-arrow-dashed",
+      "color": "#000000",
+      "lineWidth": 2,
+      "p1": {
+        "x": 787.5555419921875,
+        "y": 425.77777099609375
+      },
+      "p2": {
+        "x": 632.8889770507812,
+        "y": 408
+      },
+      "curvatureFactor": 50
+    },
+    {
+      "type": "valve-poly",
+      "color": "#000000",
+      "lineWidth": 2,
+      "x": 472.888916015625,
+      "y": 387.55548095703125,
+      "w": 160,
+      "h": 80,
+      "fillColor": "#ffffff",
+      "varShortName": "B",
+      "varFullName": "rate",
+      "varIndex": "",
+      "varAlign": "center",
+      "varUnit": "man/day",
+      "varEquation": "P*DELAY(F,10)"
+    },
+    {
+      "type": "text",
+      "text": "F\nFraction",
+      "x": 787.5555419921875,
+      "y": 427.5555114746094,
+      "color": "#000",
+      "fontSize": 16,
+      "isBold": true,
+      "align": "center",
+      "varLinked": {
+        "type": "short-line-h",
+        "color": "#000000",
+        "lineWidth": 2,
+        "x": 757.5555419921875,
+        "y": 427.5555114746094,
+        "w": 60,
+        "h": 0,
+        "fillColor": "#ffffff",
+        "varShortName": "F",
+        "varFullName": "Fraction",
+        "varIndex": "",
+        "varAlign": "center",
+        "varTextPos": "above",
+        "varUnit": "1/day",
+        "varEquation": "10"
+      }
+    },
+    {
+      "type": "text",
+      "text": "B\nrate",
+      "x": 552.888916015625,
+      "y": 427.55548095703125,
+      "color": "#000",
+      "fontSize": 16,
+      "isBold": true,
+      "align": "center",
+      "varLinked": {
+        "type": "valve-poly",
+        "color": "#000000",
+        "lineWidth": 2,
+        "x": 472.888916015625,
+        "y": 387.55548095703125,
+        "w": 160,
+        "h": 80,
+        "fillColor": "#ffffff",
+        "varShortName": "B",
+        "varFullName": "rate",
+        "varIndex": "",
+        "varAlign": "center",
+        "varUnit": "man/day",
+        "varEquation": "P*DELAY(F,10)"
+      }
+    }
+  ]
+}
