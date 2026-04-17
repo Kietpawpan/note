@@ -344,9 +344,20 @@ try {
 } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
 
 math.import({
-    DELAY: function(varName, delayTime) { return 1; }
+    DELAY: function(val, delayTime) { 
+        try {
+            // โค้ดส่วน Check Units จะแปลงชื่อตัวแปรเป็น String ของหน่วย
+            // เราจึงต้องประเมินค่า String นั้นให้กลับมาเป็น Unit Object ของ Math.js
+            if (typeof val === 'string') {
+                return math.evaluate(val); 
+            }
+            return val;
+        } catch(e) {
+            return 1;
+        }
+    }
 }, { override: true });
-   
+
         let editingObject = null;
         let simChartInstance = null;
         let currentLookupData = [];
@@ -708,9 +719,17 @@ math.import({
         // ==========================================
         // ส่วนของ Simulation Engine
         // ==========================================
-        function openSimPanel() {
+    	function openSimPanel() {
             if (activeTextInput) finalizeTextInput();
             setTool('select');
+            
+            // --- เพิ่มระบบ Auto-Save ---
+            // บังคับเซฟค่าในหน้าต่าง Properties ก่อนจำลองกราฟ เผื่อผู้ใช้ลืมกดปุ่ม Save
+            if (document.getElementById('property-panel').style.display === 'block') {
+                saveProperties();
+            }
+            // ------------------------
+
             document.getElementById('sim-panel').style.display = 'flex';
             runSimulation();
         }
@@ -902,18 +921,28 @@ math.import({
             });
 
             let parsedEquation = rhsEquation;
-            
-            for (const [varName, data] of Object.entries(modelData)) {
+
+for (const [varName, data] of Object.entries(modelData)) {
                 if (varName === nameToUse) continue; 
                 
                 const regex = new RegExp(`\\b${varName}\\b`, 'g');
                 if (parsedEquation.match(regex)) {
-                    const unitString = data.unit ? `(1 * (${data.unit}))` : "(1)";
+                    let cleanUnit = data.unit ? data.unit.trim() : "";
+                    let unitString = "(1)";
+                    
+                    // ถ้าหน่วยไม่ใช่ความว่างเปล่า และไม่ใช่ Dmnl ให้ใส่หน่วยประกบตัวเลขไปเลย
+                    if (cleanUnit !== "" && cleanUnit.toLowerCase() !== "dmnl") {
+                        // ใช้รูปแบบ (1 unit) แทนการคูณ เพื่อให้ mathjs เข้าใจว่าเป็นก้อนหน่วย
+                        unitString = `(1 ${cleanUnit})`; 
+                    }
+                    
                     parsedEquation = parsedEquation.replace(regex, unitString);
                 }
             }
 
-            if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
+
+            
+              if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
                 try {
                     const rhsResult = math.evaluate(parsedEquation);
                     let isDmnl = false;
@@ -938,26 +967,80 @@ math.import({
                 return;
             }
 
-            try {
+        try {
                 const rhsResult = math.evaluate(parsedEquation);
-                const rhsUnitParsed = rhsResult.to(lhsUnit); 
 
-                const lhsDim = math.unit(lhsUnit).dimensions;
-                const rhsDim = rhsResult.type === 'Unit' ? rhsResult.dimensions : null;
+                // --- เพิ่มเงื่อนไขแยกตรวจ Stock กับตัวแปรอื่นๆ ---
+                if (editingObject.type === 'rect') {
+                    // 1. ถ้าเป็น Stock (กล่อง) สมการ RHS ต้องเป็น "Rate" (LHS / เวลา)
+                    const lhsUnitObj = math.unit(lhsUnit);
+                    const ratio = math.divide(lhsUnitObj, rhsResult); // จับซ้ายหารขวา
+                    
+                    try {
+                        // ตรวจสอบว่าผลหารที่ได้ เป็น "หน่วยเวลา" (เช่น day, hour, month) หรือไม่
+                        ratio.to('day'); 
+                        unitResult.innerText = `✅ ผ่าน! สมการสุทธิถูกต้อง (สะสม ${lhsUnit} ต่อ ${ratio.formatUnits()})`;
+                        unitResult.classList.add('result-pass');
+                    } catch (e) {
+                        unitResult.innerText = `❌ ไม่ผ่าน! สมการสุทธิต้องมีหน่วยเป็น ${lhsUnit}/เวลา แต่ขวาได้ [ ${rhsResult.formatUnits()} ]`;
+                        unitResult.classList.add('result-fail');
+                    }
 
-                if (JSON.stringify(lhsDim) === JSON.stringify(rhsDim)) {
-                    unitResult.innerText = `✅ ผ่าน! หน่วยสอดคล้องกัน [ ${lhsUnit} ]`;
-                    unitResult.classList.add('result-pass');
-                } else {
-                    unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsResult.formatUnits()} ] แต่ซ้ายตั้งไว้ [ ${lhsUnit} ]`;
-                    unitResult.classList.add('result-fail');
-                }
+	} else {
+                    // 2. ถ้าเป็น Auxiliary หรือ Flow ตรวจสอบแบบเดิม (ซ้ายต้องเท่ากับขวาเป๊ะๆ)
+                    let rhsDim;
+                    let rhsFormat = "";
+                    let isRhsDimensionless = false;
+                    
+                    // ดักจับกรณีที่พิมพ์มาแค่ตัวเลข (ไม่มีหน่วย) หรือหน่วยตัดกันหมด
+                    if (typeof rhsResult === 'number') {
+                        rhsDim = math.unit('1').dimensions; // ถือว่าไร้หน่วย (Dimensionless)
+                        rhsFormat = "ตัวเลขไม่มีหน่วย (Dmnl)";
+                        isRhsDimensionless = true;
+                    } else if (rhsResult.type === 'Unit') {
+                        rhsDim = rhsResult.dimensions;
+                        rhsFormat = rhsResult.formatUnits();
+                        // เช็คว่า Dimensions ทุกตัวเป็น 0 หรือไม่ (แปลว่าหน่วยตัดกันหมดแล้ว)
+                        isRhsDimensionless = rhsDim.every(d => d === 0);
+                    } else {
+                         throw new Error("รูปแบบสมการฝั่งขวาไม่รองรับ");
+                    }
+
+                    // --- เพิ่มการจัดการ Dmnl (ไร้หน่วย) เป็นกรณีพิเศษ ---
+                    const isLhsDimensionless = (lhsUnit.trim().toLowerCase() === 'dmnl' || lhsUnit.trim() === '1');
+
+                    if (isLhsDimensionless) {
+                        // ถ้าซ้ายตั้งใจให้ไร้หน่วย ก็เช็คว่าขวาไร้หน่วยด้วยไหม
+                        if (isRhsDimensionless) {
+                            unitResult.innerText = `✅ ผ่าน! สมดุลแล้ว (ซ้ายไร้หน่วย = ขวาไร้หน่วย)`;
+                            unitResult.classList.add('result-pass');
+                        } else {
+                            unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ว่าไร้หน่วย [ Dmnl ]`;
+                            unitResult.classList.add('result-fail');
+                        }
+                    } else {
+                        // กรณีหน่วยปกติ
+                        const lhsDim = math.unit(lhsUnit).dimensions;
+                        if (JSON.stringify(lhsDim) === JSON.stringify(rhsDim)) {
+                            unitResult.innerText = `✅ ผ่าน! หน่วยสอดคล้องกัน [ ${lhsUnit} ]`;
+                            unitResult.classList.add('result-pass');
+                        } else {
+                            unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ [ ${lhsUnit} ]`;
+                            unitResult.classList.add('result-fail');
+                        }
+                    }
+}
+
 
             } catch (error) {
                 unitResult.innerText = `⚠️ ขวา: [ ${error.message} ]`;
                 unitResult.classList.add('result-fail');
             }
-        }
+
+}
+
+
+
 
         // ==========================================
         // ส่วนจัดการ Canvas เริ่มจากจุดนี้ลงไป...
