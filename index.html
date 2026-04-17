@@ -1969,12 +1969,17 @@ linesToDraw.forEach((item, index) => {
     let lineY = startY + (index * lineHeight); 
     ctx.fillText(textStr, item.x, lineY);
 
-    // เพิ่มบล็อกนี้เพื่อวาดเส้นใต้สำหรับตัวแปรแบบ Lookup
-    if (parentShape.isLookup && (item.text === parentShape.varShortName || item.text === parentShape.varFullName)) {
-        let metrics = ctx.measureText(textStr);
-        let textWidth = metrics.width;
-        let yOffset = obj.fontSize * 0.4;
-        let drawX = item.x;
+
+
+// เพิ่มบล็อกนี้เพื่อวาดเส้นใต้สำหรับตัวแปรแบบ Lookup
+if (parentShape.isLookup && (item.text === parentShape.varShortName || item.text === parentShape.varFullName)) {
+    let metrics = ctx.measureText(textStr);
+    let textWidth = metrics.width;
+    
+    // ปรับจาก 0.4 เป็น 0.5 เพื่อดันเส้นให้ต่ำลงพ้นฐานตัวอักษร
+    let yOffset = obj.fontSize * 0.5; 
+    
+    let drawX = item.x;
         
         if (item.align === 'left') {
             drawX = item.x;
