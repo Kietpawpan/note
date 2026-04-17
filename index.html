@@ -153,6 +153,13 @@
             <label>หน่วย (Unit)</label>
             <input type="text" id="prop-unit" placeholder="เช่น person">
         </div>
+
+        <div class="prop-row" id="prop-lookup-row" style="display: none; background: #e3f2fd; padding: 8px; border-radius: 6px; border: 1px solid #bbdefb;">
+            <label style="cursor: pointer; color: #0056b3; font-weight: bold; margin-bottom: 0; display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="prop-is-lookup" onchange="toggleLookupUI()"> ตั้งเป็น Lookup Function
+            </label>
+            <button type="button" id="btn-edit-lookup" style="display: none; margin-top: 8px; width: 100%; padding: 6px; border-radius: 4px; background: #007aff; color: white; border: none; font-weight: bold; cursor: pointer;" onclick="openLookupEditor()">📊 แก้ไขตารางกราฟ</button>
+        </div>
         
         <div class="prop-row" id="incoming-vars-row" style="display:none; background: #f9f9f9; padding: 5px; border-radius: 4px;">
             <label style="color: #007AFF;">🔗 นำเข้าจากลูกศร (คลิกแทรก)</label>
@@ -173,6 +180,30 @@
             <button class="action-btn" onclick="checkUnitUI()">Check Units</button>
             <button class="active" onclick="saveProperties()">Save</button>
             <button class="danger" onclick="closePropertyPanel()">Close</button>
+        </div>
+    </div>
+
+    <div id="lookup-panel" style="display: none; position: absolute; top: 5%; left: 10%; width: 80%; height: 90%; background: white; z-index: 1100; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); flex-direction: column; padding: 20px; box-sizing: border-box; font-family: sans-serif;">
+        <h3 style="margin: 0 0 15px 0; border-bottom: 2px solid #eee; padding-bottom: 10px;">📊 ข้อมูล Lookup Function</h3>
+        <div style="display: flex; flex: 1; gap: 20px; min-height: 0;">
+            <div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid #ccc; padding-right: 15px;">
+                <div style="flex: 1; overflow-y: auto;">
+                    <table id="lookup-table" style="width: 100%; border-collapse: collapse; text-align: center; font-size: 14px;">
+                        <thead style="background: #f5f5f5; position: sticky; top: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                            <tr><th style="padding: 5px;">Input (X)</th><th style="padding: 5px;">Output (Y)</th><th></th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <button style="margin-top: 10px; width: 100%; padding: 8px; background: #34C759; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="addLookupRow()">+ เพิ่มจุดข้อมูล</button>
+            </div>
+            <div style="flex: 2; position: relative;">
+                <canvas id="lookup-chart"></canvas>
+            </div>
+        </div>
+        <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #eee; padding-top: 15px;">
+            <button style="padding: 8px 20px; background: #007aff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="saveLookupData()">บันทึกข้อมูล</button>
+            <button style="padding: 8px 20px; background: #ff3b30; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="closeLookupEditor()">ยกเลิก</button>
         </div>
     </div>
 
@@ -309,10 +340,13 @@
             math.createUnit('rai', '1600 m^2');
             math.createUnit('ngan', '400 m^2');
             math.createUnit('sqwah', '4 m^2');
+            math.createUnit('Dmnl', '1'); // กำหนดหน่วย Dmnl พื้นฐาน
         } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
 
         let editingObject = null;
         let simChartInstance = null; // ตัวแปรกราฟ
+        let currentLookupData = [];
+        let lookupChartInstance = null;
         
         const propPanel = document.getElementById('property-panel');
         const propShortNameInput = document.getElementById('prop-short-name');
@@ -327,6 +361,26 @@
         const propInitialRow = document.getElementById('prop-initial-row');
         const lblPropEquation = document.getElementById('lbl-prop-equation');
         const unitResult = document.getElementById('unit-result');
+
+        function interpolateLookup(x, dataPoints) {
+            if (!dataPoints || dataPoints.length === 0) return 0;
+            if (dataPoints.length === 1) return dataPoints[0].y;
+            
+            let sorted = [...dataPoints].sort((a,b) => a.x - b.x);
+            
+            if (x <= sorted[0].x) return sorted[0].y;
+            if (x >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
+            
+            for (let i = 0; i < sorted.length - 1; i++) {
+                if (x >= sorted[i].x && x <= sorted[i+1].x) {
+                    let x0 = sorted[i].x, y0 = sorted[i].y;
+                    let x1 = sorted[i+1].x, y1 = sorted[i+1].y;
+                    if (x1 === x0) return y0;
+                    return y0 + ((y1 - y0) / (x1 - x0)) * (x - x0);
+                }
+            }
+            return 0;
+        }
 
         // ฟังก์ชันดึงวัตถุด้วยพิกัด
         function getShapeAtPoint(x, y, excludeObj = null) {
@@ -343,6 +397,19 @@
                 }
             }
             return null;
+        }
+
+        function toggleLookupUI() {
+            const isLookup = document.getElementById('prop-is-lookup').checked;
+            const btnEdit = document.getElementById('btn-edit-lookup');
+            const eqLabel = document.getElementById('lbl-prop-equation');
+            if (isLookup) {
+                btnEdit.style.display = 'block';
+                eqLabel.innerHTML = "สมการนำเข้าแกน X <span style='color:#007aff;'>(ต้องเป็น Dmnl)</span>";
+            } else {
+                btnEdit.style.display = 'none';
+                eqLabel.innerText = "สมการ (Equation)";
+            }
         }
 
         // ดึงเฉพาะ "ชื่อย่อ" มาเป็น Smart Badges
@@ -412,6 +479,15 @@
                 document.getElementById('prop-panel-title').innerText = "ตั้งค่าตัวแปร";
             }
 
+            if (obj.type === 'circle' || obj.type === 'oval') {
+                document.getElementById('prop-lookup-row').style.display = 'block';
+                document.getElementById('prop-is-lookup').checked = !!obj.isLookup;
+                toggleLookupUI();
+            } else {
+                document.getElementById('prop-lookup-row').style.display = 'none';
+                document.getElementById('prop-is-lookup').checked = false;
+            }
+
             unitResult.style.display = 'none';
 
             const incomingVars = getIncomingVariables(obj);
@@ -479,6 +555,13 @@
                     editingObject.varInitial = propInitialInput.value.trim();
                 }
 
+                if (editingObject.type === 'circle' || editingObject.type === 'oval') {
+                    editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
+                    if (editingObject.isLookup && !editingObject.lookupData) {
+                        editingObject.lookupData = [{x: 0, y: 1}, {x: 1, y: 1}]; 
+                    }
+                }
+
                 let combinedTextLines = [];
                 if (editingObject.varShortName) combinedTextLines.push(editingObject.varShortName);
                 if (editingObject.varFullName) combinedTextLines.push(editingObject.varFullName);
@@ -508,6 +591,118 @@
                 renderScene();
             }
             closePropertyPanel();
+        }
+
+        // ==========================================
+        // ส่วนจัดการ Lookup Panel
+        // ==========================================
+        function openLookupEditor() {
+            if (!editingObject) return;
+            currentLookupData = editingObject.lookupData ? JSON.parse(JSON.stringify(editingObject.lookupData)) : [
+                { x: 0, y: 1 },
+                { x: 1, y: 1 }
+            ];
+            document.getElementById('lookup-panel').style.display = 'flex';
+            renderLookupTable();
+            updateLookupChart();
+        }
+
+        function closeLookupEditor() {
+            document.getElementById('lookup-panel').style.display = 'none';
+        }
+
+        function saveLookupData() {
+            if (editingObject) {
+                const rows = document.querySelectorAll('#lookup-table tbody tr');
+                let newData = [];
+                rows.forEach(row => {
+                    const xVal = parseFloat(row.querySelector('.inp-x').value) || 0;
+                    const yVal = parseFloat(row.querySelector('.inp-y').value) || 0;
+                    newData.push({x: xVal, y: yVal});
+                });
+                newData.sort((a,b) => a.x - b.x);
+                editingObject.lookupData = newData;
+                currentLookupData = newData;
+            }
+            closeLookupEditor();
+        }
+
+        function renderLookupTable() {
+            const tbody = document.querySelector('#lookup-table tbody');
+            tbody.innerHTML = '';
+            currentLookupData.forEach((pt, idx) => {
+                let tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 4px;"><input type="number" class="inp-x" value="${pt.x}" step="0.1" onchange="updateLookupFromTable()" style="width: 100%; box-sizing: border-box; text-align:center; padding: 5px; border-radius: 4px; border: 1px solid #ccc;"></td>
+                    <td style="padding: 4px;"><input type="number" class="inp-y" value="${pt.y}" step="0.1" onchange="updateLookupFromTable()" style="width: 100%; box-sizing: border-box; text-align:center; padding: 5px; border-radius: 4px; border: 1px solid #ccc;"></td>
+                    <td style="padding: 4px;"><button class="danger" style="width:28px; height:28px; font-size:12px;" onclick="removeLookupRow(${idx})">✖</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addLookupRow() {
+            let lastX = currentLookupData.length > 0 ? currentLookupData[currentLookupData.length-1].x + 1 : 0;
+            let lastY = currentLookupData.length > 0 ? currentLookupData[currentLookupData.length-1].y : 0;
+            currentLookupData.push({ x: lastX, y: lastY });
+            renderLookupTable();
+            updateLookupChart();
+        }
+
+        function removeLookupRow(idx) {
+            if(currentLookupData.length <= 2) {
+                alert("ต้องมีอย่างน้อย 2 จุด");
+                return;
+            }
+            currentLookupData.splice(idx, 1);
+            renderLookupTable();
+            updateLookupChart();
+        }
+
+        function updateLookupFromTable() {
+            const rows = document.querySelectorAll('#lookup-table tbody tr');
+            let temp = [];
+            rows.forEach(row => {
+                temp.push({
+                    x: parseFloat(row.querySelector('.inp-x').value) || 0,
+                    y: parseFloat(row.querySelector('.inp-y').value) || 0
+                });
+            });
+            currentLookupData = temp;
+            updateLookupChart();
+        }
+
+        function updateLookupChart() {
+            const ctxChart = document.getElementById('lookup-chart').getContext('2d');
+            let plotData = [...currentLookupData].sort((a,b) => a.x - b.x);
+            
+            if (lookupChartInstance) {
+                lookupChartInstance.destroy();
+            }
+
+            lookupChartInstance = new Chart(ctxChart, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Lookup Multiplier',
+                        data: plotData,
+                        borderColor: '#007AFF',
+                        backgroundColor: 'rgba(0,122,255,0.2)',
+                        showLine: true,
+                        tension: 0,
+                        pointRadius: 5,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Input (X)' } },
+                        y: { title: { display: true, text: 'Output (Y)' } }
+                    }
+                }
+            });
         }
 
         // ==========================================
@@ -570,8 +765,18 @@
                 for(let pass = 0; pass < auxiliaries.length + 1; pass++) {
                     auxiliaries.forEach(aux => {
                         try {
-                            currentScope[aux.varShortName] = compiled[aux.varShortName].evaluate(currentScope);
-                        } catch(e) {} // ข้ามถ้ามี error ระหว่างคำนวณ pass แรกๆ
+                            let evalResult = compiled[aux.varShortName].evaluate(currentScope);
+                            let val = evalResult;
+                            if (evalResult && evalResult.type === 'Unit') {
+                                val = evalResult.toNumber();
+                            }
+                            
+                            if (aux.isLookup && aux.lookupData) {
+                                currentScope[aux.varShortName] = interpolateLookup(val, aux.lookupData);
+                            } else {
+                                currentScope[aux.varShortName] = val;
+                            }
+                        } catch(e) {} 
                     });
                 }
 
@@ -586,7 +791,9 @@
                 stocks.forEach(s => {
                     try {
                         let netFlow = compiled[s.varShortName].evaluate(currentScope);
-                        nextStockValues[s.varShortName] = currentScope[s.varShortName] + (netFlow * dt);
+                        let val = netFlow;
+                        if (netFlow && netFlow.type === 'Unit') val = netFlow.toNumber();
+                        nextStockValues[s.varShortName] = currentScope[s.varShortName] + (val * dt);
                     } catch(e) {
                         nextStockValues[s.varShortName] = currentScope[s.varShortName];
                     }
@@ -665,7 +872,7 @@
             unitResult.className = '';
 
             if (!nameToUse || !lhsUnit || !rhsEquation) {
-                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ, หน่วย และสมการให้ครบ";
+                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ หน่วย และสมการให้ครบ";
                 unitResult.classList.add('result-fail');
                 return;
             }
@@ -692,6 +899,31 @@
                     const unitString = data.unit ? `(1 * (${data.unit}))` : "(1)";
                     parsedEquation = parsedEquation.replace(regex, unitString);
                 }
+            }
+
+            if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
+                try {
+                    const rhsResult = math.evaluate(parsedEquation);
+                    let isDmnl = false;
+                    
+                    if (typeof rhsResult === 'number') {
+                        isDmnl = true;
+                    } else if (rhsResult.type === 'Unit') {
+                        isDmnl = rhsResult.dimensions.every(d => d === 0);
+                    }
+
+                    if (isDmnl || parsedEquation.includes('Dmnl')) {
+                        unitResult.innerText = `✅ ผ่าน แกน X (Input) ไร้หน่วย (Dmnl) และขาออกมีหน่วย [ ${lhsUnit} ]`;
+                        unitResult.classList.add('result-pass');
+                    } else {
+                        unitResult.innerText = `❌ ไม่ผ่าน สมการ X ต้องเป็น Dmnl แต่ได้ [ ${typeof rhsResult === 'number' ? 'Dmnl' : rhsResult.formatUnits()} ]`;
+                        unitResult.classList.add('result-fail');
+                    }
+                } catch (error) {
+                    unitResult.innerText = `⚠️ X: [ ${error.message} ]`;
+                    unitResult.classList.add('result-fail');
+                }
+                return;
             }
 
             try {
