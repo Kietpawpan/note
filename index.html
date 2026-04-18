@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>System Dynamics & Unit Checker</title>
 
-
-<!--
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
--->
 <script src="math.js"></script>
 <script src="chart.js"></script>
 
@@ -234,7 +229,7 @@
     <div id="toolbar">
         <div class="tool-group">
             <button id="btn-select" class="tool-btn" onclick="setTool('select')" title="เลือกและย้ายวัตถุ (ดับเบิลคลิกรูปทรงเพื่อตั้งค่า/ตรวจหน่วย)">👆</button>
-	    <button id="btn-cycle-select" class="action-btn" onclick="cycleSelection()" title="สลับการเลือกวัตถุ (กด Tab)" style="margin-left: 2px;">🔄</button>
+        <button id="btn-cycle-select" class="action-btn" onclick="cycleSelection()" title="สลับการเลือกวัตถุ (กด Tab)" style="margin-left: 2px;">🔄</button>
             <button id="btn-equation" class="tool-btn" onclick="setTool('equation')" title="ตั้งค่าสมการ (เลือกเครื่องมือนี้แล้วแตะที่รูปทรง)" style="margin-left: 2px;">🧮</button>
             <button id="btn-delete-selected" class="danger" onclick="deleteSelected()" title="ลบที่เลือก (Del)" style="display: none; width: 30px; height: 30px; font-size: 14px; margin-left: 2px;">✖</button>
             
@@ -352,11 +347,10 @@ try {
     math.createUnit('Dmnl', '1'); 
 } catch(e) { console.log("หน่วยลงทะเบียนแล้ว"); }
 
+
 math.import({
     DELAY: function(val, delayTime) { 
         try {
-            // โค้ดส่วน Check Units จะแปลงชื่อตัวแปรเป็น String ของหน่วย
-            // เราจึงต้องประเมินค่า String นั้นให้กลับมาเป็น Unit Object ของ Math.js
             if (typeof val === 'string') {
                 return math.evaluate(val); 
             }
@@ -364,6 +358,13 @@ math.import({
         } catch(e) {
             return 1;
         }
+    },
+    // --- เพิ่มฟังก์ชันเงื่อนไข ---
+    IF_THEN_ELSE: function(condition, trueVal, falseVal) {
+        return condition ? trueVal : falseVal;
+    },
+    IF: function(condition, trueVal, falseVal) {
+        return condition ? trueVal : falseVal;
     }
 }, { override: true });
 
@@ -598,7 +599,7 @@ math.import({
                 if (editingObject.varIndex) combinedTextLines.push(editingObject.varIndex);
                 let combinedText = combinedTextLines.join('\n');
                 
- 		 // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
+         // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
                 // ลบข้อความเดิมทั้งหมดที่ผูกกับรูปทรงนี้ทิ้งแบบครอบคลุม ป้องกันการซ้อนทับ
                 sceneObjects = sceneObjects.filter(o => {
                     if (o.type !== 'text' || !o.varLinked) return true;
@@ -759,7 +760,7 @@ math.import({
         // ==========================================
         // ส่วนของ Simulation Engine
         // ==========================================
-    	function openSimPanel() {
+        function openSimPanel() {
             if (activeTextInput) finalizeTextInput();
             setTool('select');
             
@@ -790,11 +791,17 @@ math.import({
             let history = { time: [] };
             variables.forEach(v => history[v.varShortName] = []);
 
-            let compiled = {};
-            variables.forEach(v => {
-                try { compiled[v.varShortName] = math.compile(v.varEquation || '0'); } 
-                catch(e) { compiled[v.varShortName] = math.compile('0'); }
-            });
+
+    let compiled = {};
+    variables.forEach(v => {
+     try { 
+        // จัดการแปลง IF THEN ELSE ก่อนนำไป Compile
+        let parsedEq = (v.varEquation || '0').replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
+        compiled[v.varShortName] = math.compile(parsedEq); 
+     } 
+     catch(e) { compiled[v.varShortName] = math.compile('0'); }
+    });
+
 
             const createDelayFunc = (scope) => {
                 return function(varName, delayTime) {
@@ -813,6 +820,10 @@ math.import({
 
             let currentScope = { Time: tStart };
             currentScope.DELAY = createDelayFunc(currentScope);
+            
+            // --- เพิ่มฟังก์ชันเงื่อนไขใน Scope จำลอง ---
+            currentScope.IF = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
+            currentScope.IF_THEN_ELSE = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
 
             auxiliaries.forEach(aux => currentScope[aux.varShortName] = 0);
             
@@ -859,16 +870,22 @@ math.import({
 
                 let scopeK2 = { ...currentScope, Time: t + dt / 2 };
                 scopeK2.DELAY = createDelayFunc(scopeK2);
+                scopeK2.IF = currentScope.IF;
+                scopeK2.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
                 stocks.forEach(s => scopeK2[s.varShortName] = currentScope[s.varShortName] + (k1[s.varShortName] * dt / 2));
                 let k2 = getRates(scopeK2);
 
                 let scopeK3 = { ...currentScope, Time: t + dt / 2 };
                 scopeK3.DELAY = createDelayFunc(scopeK3);
+                scopeK3.IF = currentScope.IF;
+                scopeK3.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
                 stocks.forEach(s => scopeK3[s.varShortName] = currentScope[s.varShortName] + (k2[s.varShortName] * dt / 2));
                 let k3 = getRates(scopeK3);
 
                 let scopeK4 = { ...currentScope, Time: t + dt };
                 scopeK4.DELAY = createDelayFunc(scopeK4);
+                scopeK4.IF = currentScope.IF;
+                scopeK4.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
                 stocks.forEach(s => scopeK4[s.varShortName] = currentScope[s.varShortName] + (k3[s.varShortName] * dt));
                 let k4 = getRates(scopeK4);
 
@@ -934,10 +951,13 @@ math.import({
 
         function checkUnitUI() {
             if (!editingObject) return;
-            
+
             const nameToUse = propShortNameInput.value.trim() || propFullNameInput.value.trim();
             const lhsUnit = propUnitInput.value.trim();
-            const rhsEquation = propEquationInput.value.trim();
+            let rhsEquation = propEquationInput.value.trim();
+
+            // แปลงรูปแบบ IF THEN ELSE เว้นวรรค ให้กลายเป็นติดกันเพื่อให้ math.js อ่านออก
+            rhsEquation = rhsEquation.replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
 
             unitResult.style.display = 'block';
             unitResult.className = '';
@@ -961,8 +981,11 @@ math.import({
             });
 
             let parsedEquation = rhsEquation;
+            
+            // --- แทรกบรรทัดนี้เพิ่มเข้าไป เพื่อให้ระบบ Check Units ผ่านคำว่า Time ไปได้ ---
+            parsedEquation = parsedEquation.replace(/\bTime\b/gi, '(1)');
 
-for (const [varName, data] of Object.entries(modelData)) {
+            for (const [varName, data] of Object.entries(modelData)) {
                 if (varName === nameToUse) continue; 
                 
                 const regex = new RegExp(`\\b${varName}\\b`, 'g');
@@ -980,11 +1003,16 @@ for (const [varName, data] of Object.entries(modelData)) {
                 }
             }
 
-
+            // --- สร้าง Scope เฉพาะกิจสำหรับตรวจสอบหน่วย ---
+            const checkScope = {
+                IF: function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; },
+                IF_THEN_ELSE: function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; },
+                Time: 1
+            };
             
-              if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
+            if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
                 try {
-                    const rhsResult = math.evaluate(parsedEquation);
+                    const rhsResult = math.evaluate(parsedEquation, checkScope);
                     let isDmnl = false;
                     
                     if (typeof rhsResult === 'number') {
@@ -1008,7 +1036,7 @@ for (const [varName, data] of Object.entries(modelData)) {
             }
 
         try {
-                const rhsResult = math.evaluate(parsedEquation);
+                const rhsResult = math.evaluate(parsedEquation, checkScope);
 
                 // --- เพิ่มเงื่อนไขแยกตรวจ Stock กับตัวแปรอื่นๆ ---
                 if (editingObject.type === 'rect') {
@@ -1026,7 +1054,7 @@ for (const [varName, data] of Object.entries(modelData)) {
                         unitResult.classList.add('result-fail');
                     }
 
-	} else {
+    } else {
                     // 2. ถ้าเป็น Auxiliary หรือ Flow ตรวจสอบแบบเดิม (ซ้ายต้องเท่ากับขวาเป๊ะๆ)
                     let rhsDim;
                     let rhsFormat = "";
@@ -2473,7 +2501,7 @@ function importProject(event) {
                 sceneObjects = data.objects;
 
 
-		// เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
+        // เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
                 sceneObjects.forEach(obj => {
                     if (obj.type === 'text' && obj.varLinked) {
                         let linkedShape = sceneObjects.find(o => {
