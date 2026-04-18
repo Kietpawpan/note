@@ -313,6 +313,8 @@
         </div>
 
         <div class="tool-group">
+            <button class="action-btn" onclick="checkAllUnits()" title="ตรวจสอบหน่วยทั่วทั้งโมเดล (Check All Units)" style="background-color: #ff9500;">⚖️</button>
+
             <button class="action-btn" onclick="openSimPanel()" title="จำลองกราฟ (Run Simulation)" style="background-color: #34C759;">▶️</button>
 
             <button class="action-btn" onclick="createWatermark()" title="ประทับลายน้ำลิขสิทธิ์">©️</button>
@@ -576,12 +578,6 @@ math.import({
                     editingObject.varInitial = propInitialInput.value.trim();
                 }
 
-
-
-
-
-// ... (โค้ดด้านบนของ saveProperties() เหมือนเดิม) ...
-
                 if (editingObject.type === 'circle' || editingObject.type === 'oval') {
                     editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
                     if (editingObject.isLookup && !editingObject.lookupData) {
@@ -599,27 +595,20 @@ math.import({
                 if (editingObject.varIndex) combinedTextLines.push(editingObject.varIndex);
                 let combinedText = combinedTextLines.join('\n');
                 
-         // --- ส่วนที่แก้ไขใหม่ เริ่มจากตรงนี้ ---
                 // ลบข้อความเดิมทั้งหมดที่ผูกกับรูปทรงนี้ทิ้งแบบครอบคลุม ป้องกันการซ้อนทับ
                 sceneObjects = sceneObjects.filter(o => {
                     if (o.type !== 'text' || !o.varLinked) return true;
                     
-                    // 1. ตรวจสอบ Reference ตรงกัน
                     let isSameRef = (o.varLinked === editingObject);
-                    
-                    // 2. ตรวจสอบชื่อตัวแปรตรงกัน (สำคัญมาก เพราะชื่อย่อต้องไม่ซ้ำกันอยู่แล้ว)
                     let isSameName = (editingObject.varShortName && o.varLinked.varShortName === editingObject.varShortName);
                     
-                    // 3. ตรวจสอบตำแหน่งพิกัดแบบอนุโลมค่าทศนิยมที่คลาดเคลื่อน (ไม่เกิน 2px)
                     let dx = Math.abs((o.varLinked.x || 0) - (editingObject.x || 0));
                     let dy = Math.abs((o.varLinked.y || 0) - (editingObject.y || 0));
                     let isSamePos = (dx < 2 && dy < 2);
                     
-                    if (isSameRef || isSameName || isSamePos) return false; // เจอข้อความเก่า ให้ลบทิ้ง
+                    if (isSameRef || isSameName || isSamePos) return false; 
                     return true;
                 });
-
-                // วาดข้อความใหม่
 
                 if(combinedText && editingObject.type !== 'text'){
                     let box = getShapeBox(editingObject);
@@ -637,7 +626,6 @@ math.import({
                         });
                     }
                 }
-                // --- สิ้นสุดส่วนที่แก้ไขใหม่ ---
 
                 renderScene();
             }
@@ -764,12 +752,9 @@ math.import({
             if (activeTextInput) finalizeTextInput();
             setTool('select');
             
-            // --- เพิ่มระบบ Auto-Save ---
-            // บังคับเซฟค่าในหน้าต่าง Properties ก่อนจำลองกราฟ เผื่อผู้ใช้ลืมกดปุ่ม Save
             if (document.getElementById('property-panel').style.display === 'block') {
                 saveProperties();
             }
-            // ------------------------
 
             document.getElementById('sim-panel').style.display = 'flex';
             runSimulation();
@@ -791,17 +776,14 @@ math.import({
             let history = { time: [] };
             variables.forEach(v => history[v.varShortName] = []);
 
-
-    let compiled = {};
-    variables.forEach(v => {
-     try { 
-        // จัดการแปลง IF THEN ELSE ก่อนนำไป Compile
-        let parsedEq = (v.varEquation || '0').replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
-        compiled[v.varShortName] = math.compile(parsedEq); 
-     } 
-     catch(e) { compiled[v.varShortName] = math.compile('0'); }
-    });
-
+            let compiled = {};
+            variables.forEach(v => {
+             try { 
+                let parsedEq = (v.varEquation || '0').replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
+                compiled[v.varShortName] = math.compile(parsedEq); 
+             } 
+             catch(e) { compiled[v.varShortName] = math.compile('0'); }
+            });
 
             const createDelayFunc = (scope) => {
                 return function(varName, delayTime) {
@@ -821,7 +803,6 @@ math.import({
             let currentScope = { Time: tStart };
             currentScope.DELAY = createDelayFunc(currentScope);
             
-            // --- เพิ่มฟังก์ชันเงื่อนไขใน Scope จำลอง ---
             currentScope.IF = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
             currentScope.IF_THEN_ELSE = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
 
@@ -949,40 +930,21 @@ math.import({
             });
         }
 
-        function checkUnitUI() {
-            if (!editingObject) return;
+        // ==========================================
+        // ฟังก์ชันแกนกลางสำหรับการตรวจสอบหน่วย (Unit Check Logic)
+        // ==========================================
+        function validateUnit(obj, modelData) {
+            const nameToUse = obj.varShortName || obj.varFullName || "ไม่ระบุชื่อ";
+            const lhsUnit = (obj.varUnit || "").trim();
+            let rhsEquation = (obj.varEquation || "").trim();
 
-            const nameToUse = propShortNameInput.value.trim() || propFullNameInput.value.trim();
-            const lhsUnit = propUnitInput.value.trim();
-            let rhsEquation = propEquationInput.value.trim();
-
-            // แปลงรูปแบบ IF THEN ELSE เว้นวรรค ให้กลายเป็นติดกันเพื่อให้ math.js อ่านออก
-            rhsEquation = rhsEquation.replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
-
-            unitResult.style.display = 'block';
-            unitResult.className = '';
-
-            if (!nameToUse || !lhsUnit || !rhsEquation) {
-                unitResult.innerText = "⚠️ กรุณากรอก ชื่อย่อ หน่วย และสมการให้ครบ";
-                unitResult.classList.add('result-fail');
-                return;
+            if (!obj.varShortName || !lhsUnit || !rhsEquation) {
+                return { pass: false, message: `[${nameToUse}] ข้อมูลไม่ครบถ้วน (ขาดชื่อย่อ, หน่วย หรือ สมการ)` };
             }
 
-            editingObject.varShortName = propShortNameInput.value.trim();
-            editingObject.varUnit = lhsUnit;
-            editingObject.varEquation = rhsEquation;
-
-            let modelData = {};
-            sceneObjects.forEach(obj => {
-                let vName = obj.varShortName || obj.varFullName;
-                if (vName) {
-                    modelData[vName] = { unit: obj.varUnit };
-                }
-            });
-
+            rhsEquation = rhsEquation.replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
             let parsedEquation = rhsEquation;
             
-            // --- แทรกบรรทัดนี้เพิ่มเข้าไป เพื่อให้ระบบ Check Units ผ่านคำว่า Time ไปได้ ---
             parsedEquation = parsedEquation.replace(/\bTime\b/gi, '(1)');
 
             for (const [varName, data] of Object.entries(modelData)) {
@@ -993,24 +955,22 @@ math.import({
                     let cleanUnit = data.unit ? data.unit.trim() : "";
                     let unitString = "(1)";
                     
-                    // ถ้าหน่วยไม่ใช่ความว่างเปล่า และไม่ใช่ Dmnl ให้ใส่หน่วยประกบตัวเลขไปเลย
                     if (cleanUnit !== "" && cleanUnit.toLowerCase() !== "dmnl") {
-                        // ใช้รูปแบบ (1 unit) แทนการคูณ เพื่อให้ mathjs เข้าใจว่าเป็นก้อนหน่วย
-                        unitString = `(1 ${cleanUnit})`; 
+                        // เติม * เข้าไปแก้ปัญหาตัวเลขติดกัน (เช่น 1 1/year)
+                        unitString = `(1 * ${cleanUnit})`; 
                     }
                     
                     parsedEquation = parsedEquation.replace(regex, unitString);
                 }
             }
 
-            // --- สร้าง Scope เฉพาะกิจสำหรับตรวจสอบหน่วย ---
             const checkScope = {
                 IF: function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; },
                 IF_THEN_ELSE: function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; },
                 Time: 1
             };
             
-            if (editingObject.isLookup || (document.getElementById('prop-lookup-row').style.display !== 'none' && document.getElementById('prop-is-lookup').checked)) {
+            if (obj.isLookup) {
                 try {
                     const rhsResult = math.evaluate(parsedEquation, checkScope);
                     let isDmnl = false;
@@ -1022,92 +982,140 @@ math.import({
                     }
 
                     if (isDmnl || parsedEquation.includes('Dmnl')) {
-                        unitResult.innerText = `✅ ผ่าน แกน X (Input) ไร้หน่วย (Dmnl) และขาออกมีหน่วย [ ${lhsUnit} ]`;
-                        unitResult.classList.add('result-pass');
+                        return { pass: true, message: `[${nameToUse}] แกน X ไร้หน่วย (Dmnl) ขาออกมีหน่วย [ ${lhsUnit} ]` };
                     } else {
-                        unitResult.innerText = `❌ ไม่ผ่าน สมการ X ต้องเป็น Dmnl แต่ได้ [ ${typeof rhsResult === 'number' ? 'Dmnl' : rhsResult.formatUnits()} ]`;
-                        unitResult.classList.add('result-fail');
+                        return { pass: false, message: `[${nameToUse}] สมการ X ต้องเป็น Dmnl แต่ได้ [ ${typeof rhsResult === 'number' ? 'Dmnl' : rhsResult.formatUnits()} ]` };
                     }
                 } catch (error) {
-                    unitResult.innerText = `⚠️ X: [ ${error.message} ]`;
-                    unitResult.classList.add('result-fail');
+                    return { pass: false, message: `[${nameToUse}] ขวา: ${error.message}` };
                 }
-                return;
             }
 
-        try {
+            try {
                 const rhsResult = math.evaluate(parsedEquation, checkScope);
 
-                // --- เพิ่มเงื่อนไขแยกตรวจ Stock กับตัวแปรอื่นๆ ---
-                if (editingObject.type === 'rect') {
-                    // 1. ถ้าเป็น Stock (กล่อง) สมการ RHS ต้องเป็น "Rate" (LHS / เวลา)
+                if (obj.type === 'rect') {
                     const lhsUnitObj = math.unit(lhsUnit);
-                    const ratio = math.divide(lhsUnitObj, rhsResult); // จับซ้ายหารขวา
+                    const ratio = math.divide(lhsUnitObj, rhsResult); 
                     
                     try {
-                        // ตรวจสอบว่าผลหารที่ได้ เป็น "หน่วยเวลา" (เช่น day, hour, month) หรือไม่
                         ratio.to('day'); 
-                        unitResult.innerText = `✅ ผ่าน! สมการสุทธิถูกต้อง (สะสม ${lhsUnit} ต่อ ${ratio.formatUnits()})`;
-                        unitResult.classList.add('result-pass');
+                        return { pass: true, message: `[${nameToUse}] สมการสุทธิถูกต้อง (สะสม ${lhsUnit} ต่อ ${ratio.formatUnits()})` };
                     } catch (e) {
-                        unitResult.innerText = `❌ ไม่ผ่าน! สมการสุทธิต้องมีหน่วยเป็น ${lhsUnit}/เวลา แต่ขวาได้ [ ${rhsResult.formatUnits()} ]`;
-                        unitResult.classList.add('result-fail');
+                        return { pass: false, message: `[${nameToUse}] สมการสุทธิต้องมีหน่วยเป็น ${lhsUnit}/เวลา แต่ขวาได้ [ ${rhsResult.formatUnits()} ]` };
                     }
-
-    } else {
-                    // 2. ถ้าเป็น Auxiliary หรือ Flow ตรวจสอบแบบเดิม (ซ้ายต้องเท่ากับขวาเป๊ะๆ)
+                } else {
                     let rhsDim;
                     let rhsFormat = "";
                     let isRhsDimensionless = false;
                     
-                    // ดักจับกรณีที่พิมพ์มาแค่ตัวเลข (ไม่มีหน่วย) หรือหน่วยตัดกันหมด
                     if (typeof rhsResult === 'number') {
-                        rhsDim = math.unit('1').dimensions; // ถือว่าไร้หน่วย (Dimensionless)
-                        rhsFormat = "ตัวเลขไม่มีหน่วย (Dmnl)";
+                        rhsDim = math.unit('1').dimensions; 
+                        rhsFormat = "Dmnl";
                         isRhsDimensionless = true;
                     } else if (rhsResult.type === 'Unit') {
                         rhsDim = rhsResult.dimensions;
                         rhsFormat = rhsResult.formatUnits();
-                        // เช็คว่า Dimensions ทุกตัวเป็น 0 หรือไม่ (แปลว่าหน่วยตัดกันหมดแล้ว)
                         isRhsDimensionless = rhsDim.every(d => d === 0);
                     } else {
                          throw new Error("รูปแบบสมการฝั่งขวาไม่รองรับ");
                     }
 
-                    // --- เพิ่มการจัดการ Dmnl (ไร้หน่วย) เป็นกรณีพิเศษ ---
-                    const isLhsDimensionless = (lhsUnit.trim().toLowerCase() === 'dmnl' || lhsUnit.trim() === '1');
+                    const isLhsDimensionless = (lhsUnit.toLowerCase() === 'dmnl' || lhsUnit === '1');
 
                     if (isLhsDimensionless) {
-                        // ถ้าซ้ายตั้งใจให้ไร้หน่วย ก็เช็คว่าขวาไร้หน่วยด้วยไหม
                         if (isRhsDimensionless) {
-                            unitResult.innerText = `✅ ผ่าน! สมดุลแล้ว (ซ้ายไร้หน่วย = ขวาไร้หน่วย)`;
-                            unitResult.classList.add('result-pass');
+                            return { pass: true, message: `[${nameToUse}] สมดุลแล้ว (ซ้ายไร้หน่วย = ขวาไร้หน่วย)` };
                         } else {
-                            unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ว่าไร้หน่วย [ Dmnl ]`;
-                            unitResult.classList.add('result-fail');
+                            return { pass: false, message: `[${nameToUse}] ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ว่าไร้หน่วย [ Dmnl ]` };
                         }
                     } else {
-                        // กรณีหน่วยปกติ
                         const lhsDim = math.unit(lhsUnit).dimensions;
                         if (JSON.stringify(lhsDim) === JSON.stringify(rhsDim)) {
-                            unitResult.innerText = `✅ ผ่าน! หน่วยสอดคล้องกัน [ ${lhsUnit} ]`;
-                            unitResult.classList.add('result-pass');
+                            return { pass: true, message: `[${nameToUse}] หน่วยสอดคล้องกัน [ ${lhsUnit} ]` };
                         } else {
-                            unitResult.innerText = `❌ ไม่ผ่าน! ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ [ ${lhsUnit} ]`;
-                            unitResult.classList.add('result-fail');
+                            return { pass: false, message: `[${nameToUse}] ขวาได้ [ ${rhsFormat} ] แต่ซ้ายตั้งไว้ [ ${lhsUnit} ]` };
                         }
                     }
-}
-
-
+                }
             } catch (error) {
-                unitResult.innerText = `⚠️ ขวา: [ ${error.message} ]`;
+                return { pass: false, message: `[${nameToUse}] ขวา: ${error.message}` };
+            }
+        }
+
+        // สำหรับปุ่ม Check Units ในหน้าต่าง Property (ทีละตัว)
+        function checkUnitUI() {
+            if (!editingObject) return;
+
+            // ดึงค่าล่าสุดจาก Input ลง Object ชั่วคราวเพื่อให้ตรวจเช็คได้ทันที
+            editingObject.varShortName = propShortNameInput.value.trim();
+            editingObject.varFullName = propFullNameInput.value.trim();
+            editingObject.varUnit = propUnitInput.value.trim();
+            editingObject.varEquation = propEquationInput.value.trim();
+            editingObject.isLookup = document.getElementById('prop-is-lookup').checked;
+
+            let modelData = {};
+            sceneObjects.forEach(obj => {
+                let vName = obj.varShortName || obj.varFullName;
+                if (vName) {
+                    modelData[vName] = { unit: obj.varUnit };
+                }
+            });
+
+            let result = validateUnit(editingObject, modelData);
+
+            unitResult.style.display = 'block';
+            unitResult.className = '';
+
+            if (result.pass) {
+                unitResult.innerText = `✅ ผ่าน! ${result.message.replace(/\[.*?\]\s*/, '')}`;
+                unitResult.classList.add('result-pass');
+            } else {
+                unitResult.innerText = `❌ ไม่ผ่าน! ${result.message.replace(/\[.*?\]\s*/, '')}`;
                 unitResult.classList.add('result-fail');
             }
+        }
 
-}
+        // ==========================================
+        // ฟังก์ชันใหม่: ตรวจสอบหน่วยทุกตัวแปรในโมเดล (Check All Units)
+        // ==========================================
+        function checkAllUnits() {
+            // บังคับเซฟค่าใน Property Panel ก่อน (ถ้าหน้าต่างเปิดอยู่)
+            if (document.getElementById('property-panel').style.display === 'block') {
+                saveProperties();
+            }
 
+            // กรองเอาเฉพาะ Object ที่เป็นตัวแปร (มีชื่อย่อ)
+            let modelVariables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
+            
+            if (modelVariables.length === 0) {
+                alert("ยังไม่มีตัวแปรให้ตรวจสอบในโมเดลครับ");
+                return;
+            }
 
+            // สร้าง Dictionary ของตัวแปรทั้งหมดเพื่อใช้ในการอ้างอิง
+            let modelData = {};
+            modelVariables.forEach(obj => {
+                modelData[obj.varShortName] = { unit: obj.varUnit };
+            });
+
+            let errors = [];
+
+            // ตรวจสอบทีละตัวแปร
+            modelVariables.forEach(obj => {
+                let result = validateUnit(obj, modelData);
+                if (!result.pass) {
+                    errors.push(`• ${result.message}`);
+                }
+            });
+
+            // แจ้งเตือนผลลัพธ์
+            if (errors.length === 0) {
+                alert("✅ Unit is OK\nหน่วยของทุกตัวแปรในโมเดลถูกต้องครับ!");
+            } else {
+                alert("❌ พบตัวแปรที่หน่วยไม่ถูกต้อง:\n\n" + errors.join("\n\n"));
+            }
+        }
 
 
         // ==========================================
@@ -1242,14 +1250,12 @@ math.import({
 
 
 window.addEventListener('keydown', (e) => {
-    // เพิ่มการดักจับปุ่ม Tab
     if (e.key === 'Tab') {
-        e.preventDefault(); // ป้องกันไม่ให้เบราว์เซอร์เลื่อนโฟกัสของหน้าเว็บ
+        e.preventDefault(); 
         cycleSelection();
         return;
     }
 
-    // ส่วนประกอบเดิมของการลบวัตถุ
     if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedObject || multiSelectedObjects.length > 0) && currentTool === 'select') {
         if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') return; 
         deleteSelected();
@@ -1323,13 +1329,11 @@ window.addEventListener('keydown', (e) => {
         }
 
 function cycleSelection() {
-    // ถ้าไม่มีวัตถุบนกระดานให้ข้ามไป
     if (sceneObjects.length === 0) return;
 
     if (activeTextInput) finalizeTextInput();
     setTool('select');
 
-    // นำวัตถุที่อยู่ล่างสุด (ลำดับที่ 0) ดึงขึ้นมาไว้บนสุด (ท้าย array)
     let targetObj = sceneObjects[0];
     sceneObjects.splice(0, 1);
     sceneObjects.push(targetObj);
@@ -1338,13 +1342,11 @@ function cycleSelection() {
     multiSelectedObjects = [];
     document.getElementById('btn-delete-selected').style.display = 'flex';
 
-    // อัปเดตสถานะปุ่มเทสีเทาให้ตรงกับวัตถุที่เลือกใหม่
     if (['rect', 'cloud', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'circle', 'short-line-h'].includes(selectedObject.type)) {
         document.getElementById('fill-gray-check').checked = (selectedObject.fillColor === '#e0e0e0');
         isFillLightGray = (selectedObject.fillColor === '#e0e0e0');
     }
 
-    // วาดหน้าจอใหม่เพื่อแสดงกรอบการเลือก
     renderScene();
 }
 
@@ -1990,44 +1992,36 @@ function cycleSelection() {
                                 startY = box.cy - ((linesToDraw.length - 1) * lineHeight) / 2;
                             }
 
+                            linesToDraw.forEach((item, index) => {
+                                ctx.textAlign = item.align;
+                                let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
+                                let lineY = startY + (index * lineHeight); 
+                                ctx.fillText(textStr, item.x, lineY);
 
-linesToDraw.forEach((item, index) => {
-    ctx.textAlign = item.align;
-    let textStr = obj.isAllCaps ? item.text.toUpperCase() : item.text;
-    let lineY = startY + (index * lineHeight); 
-    ctx.fillText(textStr, item.x, lineY);
+                                if (parentShape.isLookup && (item.text === parentShape.varShortName || item.text === parentShape.varFullName)) {
+                                    let metrics = ctx.measureText(textStr);
+                                    let textWidth = metrics.width;
+                                    
+                                    let yOffset = obj.fontSize * 0.5; 
+                                    
+                                    let drawX = item.x;
+                                        
+                                    if (item.align === 'left') {
+                                        drawX = item.x;
+                                    } else if (item.align === 'right') {
+                                        drawX = item.x - textWidth;
+                                    } else {
+                                        drawX = item.x - textWidth / 2;
+                                    }
 
-
-
-// เพิ่มบล็อกนี้เพื่อวาดเส้นใต้สำหรับตัวแปรแบบ Lookup
-if (parentShape.isLookup && (item.text === parentShape.varShortName || item.text === parentShape.varFullName)) {
-    let metrics = ctx.measureText(textStr);
-    let textWidth = metrics.width;
-    
-    // ปรับจาก 0.4 เป็น 0.5 เพื่อดันเส้นให้ต่ำลงพ้นฐานตัวอักษร
-    let yOffset = obj.fontSize * 0.5; 
-    
-    let drawX = item.x;
-        
-        if (item.align === 'left') {
-            drawX = item.x;
-        } else if (item.align === 'right') {
-            drawX = item.x - textWidth;
-        } else {
-            drawX = item.x - textWidth / 2;
-        }
-
-        ctx.beginPath();
-        ctx.strokeStyle = obj.color;
-        // กำหนดความหนาเส้นใต้ให้เท่ากับเส้นขอบวงกลม
-        ctx.lineWidth = parentShape.lineWidth || 4; 
-        ctx.moveTo(drawX, lineY + yOffset);
-        ctx.lineTo(drawX + textWidth, lineY + yOffset);
-        ctx.stroke();
-    }
-});
-
-
+                                    ctx.beginPath();
+                                    ctx.strokeStyle = obj.color;
+                                    ctx.lineWidth = parentShape.lineWidth || 4; 
+                                    ctx.moveTo(drawX, lineY + yOffset);
+                                    ctx.lineTo(drawX + textWidth, lineY + yOffset);
+                                    ctx.stroke();
+                                }
+                            });
                         }
                         return; 
                     }
@@ -2500,14 +2494,11 @@ function importProject(event) {
             if (data.objects && data.camera) {
                 sceneObjects = data.objects;
 
-
-        // เพิ่มบล็อกนี้เพื่อเชื่อม Reference ระหว่าง Text และ Shape ให้สมบูรณ์
                 sceneObjects.forEach(obj => {
                     if (obj.type === 'text' && obj.varLinked) {
                         let linkedShape = sceneObjects.find(o => {
                             if (o.type === 'text') return false;
                             
-                            // เชื่อม Reference โดยดูจากชื่อย่อตรงกัน หรือ พิกัดใกล้เคียงกัน (เผื่อระยะคลาดเคลื่อน 5px)
                             let matchName = (o.varShortName && o.varShortName === obj.varLinked.varShortName);
                             let dx = Math.abs(o.x - obj.varLinked.x);
                             let dy = Math.abs(o.y - obj.varLinked.y);
@@ -2520,7 +2511,6 @@ function importProject(event) {
                         }
                     }
                 });
-
 
                 camera = data.camera;
                 selectedObject = null;
@@ -2536,8 +2526,6 @@ function importProject(event) {
     reader.onerror = () => { alert('เบราว์เซอร์ไม่สามารถอ่านไฟล์นี้ได้'); input.value = ''; };
     reader.readAsText(file);
 }
-
-
 
 // สมัครใช้งาน Service Worker สำหรับโหมด Offline
   if ('serviceWorker' in navigator) {
