@@ -392,7 +392,31 @@
         <div id="val-status" style="font-size: 13px; font-weight: bold; margin-top: 5px;"></div>
     </div>
     
+<div style="margin-top: 20px; border-top: 2px dashed #eee; padding-top: 15px;">
+        <h4 style="margin: 0 0 10px 0; color: #AF52DE;">🎯 Auto-Calibration (ค้นหาค่าที่ดีที่สุดอัตโนมัติ)</h4>
+        
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 13px; margin-bottom: 5px;">เลือกตัวแปรคงที่ (Parameter) ที่ต้องการปรับจูน:</label>
+            <select id="opt-param-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px;"></select>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <div style="flex: 1;">
+                <label style="display: block; font-size: 13px;">ค้นหาตั้งแต่ (Min)</label>
+                <input type="number" id="opt-min" step="0.01" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+            </div>
+            <div style="flex: 1;">
+                <label style="display: block; font-size: 13px;">จนถึง (Max)</label>
+                <input type="number" id="opt-max" step="0.01" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+            </div>
+            <div style="flex: 1; display: flex; align-items: flex-end;">
+                <button style="width: 100%; padding: 8px; background: #AF52DE; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="runAutoCalibration()">⚡ Optimize</button>
+            </div>
+        </div>
+    </div>
+
     <div style="display: flex; justify-content: flex-end; gap: 10px;">
+
         <button style="padding: 8px 20px; background: #007AFF; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="processValidation()">ซ้อนทับกราฟ</button>
         <button style="padding: 8px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="closeValidationPanel()">ปิด</button>
     </div>
@@ -2949,26 +2973,50 @@ function renderMonteCarloChart(allRunsHistory, variables, targetVarName) {
 let currentValidationData = null; // เก็บข้อมูลเปรียบเทียบที่พล็อตค้างไว้
 
 function openValidationPanel() {
-    // ต้องรัน Simulation ก่อนถึงจะเปรียบเทียบได้
     if (!globalSimHistory || !globalSimHistory.history || globalSimHistory.history.time.length === 0) {
         alert("กรุณากดปุ่ม '▶️ คำนวณใหม่' เพื่อรัน Simulation อย่างน้อย 1 ครั้งก่อนเปรียบเทียบครับ");
         return;
     }
 
-    const select = document.getElementById('val-var-select');
-    select.innerHTML = '';
-    
-    // ดึงรายชื่อตัวแปรทั้งหมดที่มีในกราฟมาให้เลือก
-    let variables = globalSimHistory.variables;
-    variables.forEach(v => {
+    // เซ็ต Dropdown สำหรับตัวแปรเป้าหมาย (เปรียบเทียบข้อมูลจริง)
+    const selectTarget = document.getElementById('val-var-select');
+    selectTarget.innerHTML = '';
+    globalSimHistory.variables.forEach(v => {
         let opt = document.createElement('option');
         opt.value = v.varShortName;
         opt.text = v.varShortName + (v.varFullName ? ` (${v.varFullName})` : '');
-        select.appendChild(opt);
+        selectTarget.appendChild(opt);
     });
+
+    // เซ็ต Dropdown สำหรับ Parameter ที่ต้องการปรับจูน
+    const selectParam = document.getElementById('opt-param-select');
+    selectParam.innerHTML = '';
+    let params = sceneObjects.filter(obj => obj.varShortName && obj.type !== 'rect' && !obj.isLookup);
+    
+    if (params.length > 0) {
+        params.forEach(v => {
+            let opt = document.createElement('option');
+            opt.value = v.varShortName;
+            opt.text = v.varShortName + (v.varFullName ? ` (${v.varFullName})` : '');
+            selectParam.appendChild(opt);
+        });
+
+        // ดึงค่าสมการเดิมมาตั้งเป็น Min/Max เบื้องต้น (± 50%)
+        let defaultVal = parseFloat(params[0].varEquation) || 1;
+        document.getElementById('opt-min').value = (defaultVal * 0.5).toFixed(2);
+        document.getElementById('opt-max').value = (defaultVal * 1.5).toFixed(2);
+
+        selectParam.onchange = (e) => {
+            let p = params.find(obj => obj.varShortName === e.target.value);
+            let val = parseFloat(p.varEquation) || 1;
+            document.getElementById('opt-min').value = (val * 0.5).toFixed(2);
+            document.getElementById('opt-max').value = (val * 1.5).toFixed(2);
+        };
+    }
 
     document.getElementById('validation-panel').style.display = 'block';
 }
+
 
 function closeValidationPanel() {
     document.getElementById('validation-panel').style.display = 'none';
@@ -3095,6 +3143,170 @@ function processValidation() {
         simChartInstance.data.datasets.push(newDataset);
         simChartInstance.update();
     }
+}
+
+function runAutoCalibration() {
+    const targetVarName = document.getElementById('val-var-select').value;
+    const rawText = document.getElementById('val-data-input').value;
+    const paramToTuneName = document.getElementById('opt-param-select').value;
+    const minVal = parseFloat(document.getElementById('opt-min').value);
+    const maxVal = parseFloat(document.getElementById('opt-max').value);
+    const steps = 100; // จำนวนรอบที่ใช้ค้นหา (Grid Search 100 สเตป)
+
+    if (!targetVarName || rawText.trim() === '' || !paramToTuneName || isNaN(minVal) || isNaN(maxVal)) {
+        alert("ข้อมูลไม่ครบถ้วน กรุณาเลือกตัวแปร, วางข้อมูลเปรียบเทียบ และระบุช่วง Min/Max ให้ครบถ้วนครับ");
+        return;
+    }
+
+    // แปลงข้อมูลอ้างอิง
+    const rows = rawText.trim().split(/\r?\n/);
+    let historicalPoints = [];
+    for (let i = 0; i < rows.length; i++) {
+        let cols = rows[i].trim().split(/[\t, ]+/);
+        if (cols.length >= 2) {
+            let tVal = parseFloat(cols[0]), yVal = parseFloat(cols[1]);
+            if (!isNaN(tVal) && !isNaN(yVal)) historicalPoints.push({ x: tVal, y: yVal });
+        }
+    }
+
+    if (historicalPoints.length < 2) return alert("รูปแบบข้อมูลอ้างอิงไม่ถูกต้อง");
+    historicalPoints.sort((a, b) => a.x - b.x);
+
+    let paramObj = sceneObjects.find(o => o.varShortName === paramToTuneName);
+    if (!paramObj) return;
+
+    const originalEquation = paramObj.varEquation;
+    const tStart = parseFloat(document.getElementById('sim-start').value) || 0;
+    const tEnd = parseFloat(document.getElementById('sim-end').value) || 10;
+    const dt = parseFloat(document.getElementById('sim-dt').value) || 0.25;
+
+    let variables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
+    let stocks = variables.filter(v => v.type === 'rect');
+    let auxiliaries = variables.filter(v => v.type !== 'rect');
+
+    let bestValue = minVal;
+    let minError = Infinity;
+
+    // ระบบค้นหา (Optimization Loop)
+    for (let i = 0; i <= steps; i++) {
+        // ทดลองค่าทีละสเตปจาก Min ไป Max
+        let testVal = minVal + (i * (maxVal - minVal) / steps);
+        paramObj.varEquation = testVal.toString();
+
+        let compiled = {};
+        variables.forEach(v => {
+            try { compiled[v.varShortName] = math.compile((v.varEquation || '0').replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE')); } 
+            catch(e) { compiled[v.varShortName] = math.compile('0'); }
+        });
+
+        let currentScope = { Time: tStart };
+        let history = { time: [] };
+        variables.forEach(v => history[v.varShortName] = []);
+
+        const createDelayFunc = (scope, hist) => {
+            return function(varName, delayTime) {
+                let targetTime = scope.Time - delayTime; 
+                if (hist.time.length === 0 || targetTime < hist.time[0]) return 0;
+                for (let j = hist.time.length - 1; j >= 0; j--) {
+                    if (hist.time[j] <= targetTime + 0.0001) return hist[varName] ? hist[varName][j] : 0;
+                }
+                return 0;
+            };
+        };
+
+        currentScope.DELAY = createDelayFunc(currentScope, history);
+        currentScope.IF = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
+        currentScope.IF_THEN_ELSE = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
+
+        auxiliaries.forEach(aux => currentScope[aux.varShortName] = 0);
+        stocks.forEach(s => {
+            try { currentScope[s.varShortName] = math.evaluate(s.varInitial || '0', currentScope); } 
+            catch(e) { currentScope[s.varShortName] = 0; }
+        });
+
+        function evaluateAuxiliaries(scope) {
+            for(let pass = 0; pass < auxiliaries.length + 1; pass++) {
+                auxiliaries.forEach(aux => {
+                    try {
+                        let evalResult = compiled[aux.varShortName].evaluate(scope);
+                        let val = evalResult && evalResult.type === 'Unit' ? evalResult.toNumber() : evalResult;
+                        scope[aux.varShortName] = (aux.isLookup && aux.lookupData) ? interpolateLookup(val, aux.lookupData) : val;
+                    } catch(e) {} 
+                });
+            }
+        }
+
+        function getRates(scope) {
+            evaluateAuxiliaries(scope);
+            let rates = {};
+            stocks.forEach(s => {
+                try {
+                    let netFlow = compiled[s.varShortName].evaluate(scope);
+                    rates[s.varShortName] = netFlow && netFlow.type === 'Unit' ? netFlow.toNumber() : netFlow;
+                } catch(e) { rates[s.varShortName] = 0; }
+            });
+            return rates;
+        }
+
+        // Run Simulation
+        for(let t = tStart; t <= tEnd + (dt/10); t += dt) {
+            currentScope.Time = t;
+            evaluateAuxiliaries(currentScope);
+            history.time.push(parseFloat(t.toFixed(4)));
+            variables.forEach(v => history[v.varShortName].push(currentScope[v.varShortName] || 0));
+
+            let k1 = getRates(currentScope);
+            let scopeK2 = { ...currentScope, Time: t + dt / 2 }; scopeK2.DELAY = createDelayFunc(scopeK2, history); scopeK2.IF = currentScope.IF; scopeK2.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK2[s.varShortName] = currentScope[s.varShortName] + (k1[s.varShortName] * dt / 2));
+            let k2 = getRates(scopeK2);
+            let scopeK3 = { ...currentScope, Time: t + dt / 2 }; scopeK3.DELAY = createDelayFunc(scopeK3, history); scopeK3.IF = currentScope.IF; scopeK3.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK3[s.varShortName] = currentScope[s.varShortName] + (k2[s.varShortName] * dt / 2));
+            let k3 = getRates(scopeK3);
+            let scopeK4 = { ...currentScope, Time: t + dt }; scopeK4.DELAY = createDelayFunc(scopeK4, history); scopeK4.IF = currentScope.IF; scopeK4.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK4[s.varShortName] = currentScope[s.varShortName] + (k3[s.varShortName] * dt));
+            let k4 = getRates(scopeK4);
+
+            stocks.forEach(s => {
+                let avgRate = (k1[s.varShortName] + 2 * k2[s.varShortName] + 2 * k3[s.varShortName] + k4[s.varShortName]) / 6;
+                currentScope[s.varShortName] = currentScope[s.varShortName] + (avgRate * dt);
+            });
+        }
+
+        // คำนวณ Error (MAPE) ของรอบนี้
+        let simTime = history.time;
+        let simData = history[targetVarName];
+        let totalPercentageError = 0;
+        let countValidPoints = 0;
+
+        historicalPoints.forEach(histPt => {
+            let closestIdx = 0, minDiff = Infinity;
+            for (let j = 0; j < simTime.length; j++) {
+                let diff = Math.abs(simTime[j] - histPt.x);
+                if (diff < minDiff) { minDiff = diff; closestIdx = j; }
+            }
+            let predictedY = simData[closestIdx];
+            if (histPt.y !== 0) {
+                totalPercentageError += Math.abs((histPt.y - predictedY) / histPt.y);
+                countValidPoints++;
+            }
+        });
+
+        let mape = (totalPercentageError / countValidPoints) * 100;
+        
+        // บันทึกค่าที่ดีที่สุด
+        if (mape < minError) {
+            minError = mape;
+            bestValue = testVal;
+        }
+    }
+
+    // นำค่าที่ดีที่สุดไปบันทึกกลับลงในโมเดลหลัก
+    paramObj.varEquation = bestValue.toFixed(4); // อัปเดตพารามิเตอร์
+    alert(`🎯 ปรับจูนสำเร็จ!\nระบบพบว่าค่า ${paramToTuneName} ที่เหมาะสมที่สุดคือ: ${bestValue.toFixed(4)}\nโดยมีความคลาดเคลื่อน (MAPE) ต่ำสุดที่: ${minError.toFixed(2)}%`);
+    
+    // สั่งรันกราฟใหม่และซ้อนทับข้อมูลจริงให้อัตโนมัติ
+    runSimulation();
+    processValidation();
 }
     </script>
 </body>
