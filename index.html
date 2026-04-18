@@ -226,6 +226,7 @@
             <label>ช่วงเวลา (dt): <input type="number" id="sim-dt" class="sim-input" value="0.25" step="0.05"></label>
             
 <button class="active" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="runSimulation()">▶️ คำนวณใหม่</button>
+<button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px; background-color: #AF52DE;" onclick="openSensitivityPanel()">🎲 Sensitivity</button>
 <button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px;" onclick="exportSimulationCSV()">💾 ส่งออก CSV</button>
 
 
@@ -341,6 +342,35 @@
     </div>
     
     <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importProject(event)">
+
+<div id="sa-panel" style="display: none; position: absolute; top: 15%; left: 50%; transform: translateX(-50%); width: 500px; background: white; z-index: 1200; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); padding: 20px; font-family: sans-serif;">
+    <h3 style="margin: 0 0 15px 0; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #333;">🎲 Monte Carlo Simulation</h3>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; font-weight: bold; margin-bottom: 5px;">เลือกตัวแปรที่จะสุ่มค่า (Parameter):</label>
+        <select id="sa-var-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px;"></select>
+    </div>
+    
+    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+        <div style="flex: 1;">
+            <label style="display: block; font-size: 13px;">ค่าต่ำสุด (Min)</label>
+            <input type="number" id="sa-min" step="0.1" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+        </div>
+        <div style="flex: 1;">
+            <label style="display: block; font-size: 13px;">ค่าสูงสุด (Max)</label>
+            <input type="number" id="sa-max" step="0.1" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+        </div>
+        <div style="flex: 1;">
+            <label style="display: block; font-size: 13px;">จำนวนรอบรัน</label>
+            <input type="number" id="sa-runs" value="50" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+        </div>
+    </div>
+    
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button style="padding: 8px 20px; background: #AF52DE; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="runMonteCarlo()">▶️ รันแบบสุ่ม</button>
+        <button style="padding: 8px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="closeSensitivityPanel()">ยกเลิก</button>
+    </div>
+</div>
 
     <script>
 // ==========================================
@@ -2635,6 +2665,255 @@ function importCSVData(event) {
         event.target.value = ''; // รีเซ็ต input เผื่อต้องการโหลดไฟล์เดิมซ้ำ
     };
     reader.readAsText(file);
+}
+
+// ==========================================
+// ส่วนจัดการ Sensitivity Analysis (Monte Carlo)
+// ==========================================
+
+function openSensitivityPanel() {
+    const select = document.getElementById('sa-var-select');
+    select.innerHTML = '';
+    
+    // ดึงมาเฉพาะตัวแปรที่ไม่ใช่ Stock (ไม่ใช่กล่อง) และไม่ใช่ Lookup
+    let params = sceneObjects.filter(obj => obj.varShortName && obj.type !== 'rect' && !obj.isLookup);
+    
+    if (params.length === 0) {
+        alert("ยังไม่มีตัวแปรให้สุ่มครับ กรุณาสร้างตัวแปร Auxiliary (วงรี) ก่อน");
+        return;
+    }
+
+    params.forEach(v => {
+        let opt = document.createElement('option');
+        opt.value = v.varShortName;
+        opt.text = v.varShortName + (v.varFullName ? ` (${v.varFullName})` : '');
+        select.appendChild(opt);
+    });
+
+    // เซ็ตค่า Min/Max เริ่มต้นให้อิงจากค่าเดิม
+    let firstParam = params[0];
+    let defaultVal = parseFloat(firstParam.varEquation) || 1;
+    document.getElementById('sa-min').value = (defaultVal * 0.5).toFixed(2);
+    document.getElementById('sa-max').value = (defaultVal * 1.5).toFixed(2);
+
+    // ดักจับการเปลี่ยนตัวแปรเพื่ออัปเดตค่า Min/Max อัตโนมัติ
+    select.onchange = (e) => {
+        let p = params.find(obj => obj.varShortName === e.target.value);
+        let val = parseFloat(p.varEquation) || 1;
+        document.getElementById('sa-min').value = (val * 0.5).toFixed(2);
+        document.getElementById('sa-max').value = (val * 1.5).toFixed(2);
+    };
+
+    document.getElementById('sa-panel').style.display = 'block';
+}
+
+function closeSensitivityPanel() {
+    document.getElementById('sa-panel').style.display = 'none';
+}
+
+function runMonteCarlo() {
+    const targetVarName = document.getElementById('sa-var-select').value;
+    const minVal = parseFloat(document.getElementById('sa-min').value);
+    const maxVal = parseFloat(document.getElementById('sa-max').value);
+    const runs = parseInt(document.getElementById('sa-runs').value) || 50;
+    
+    if (!targetVarName || isNaN(minVal) || isNaN(maxVal)) return;
+
+    // ตั้งปุ่มให้เป็นสถานะกำลังโหลด
+    const btn = document.querySelector('#sa-panel button[onclick="runMonteCarlo()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⏳ กำลังคำนวณ...";
+    btn.disabled = true;
+
+    // หน่วงเวลาเล็กน้อยให้ UI อัปเดตคำว่า กำลังคำนวณ ก่อนเบราว์เซอร์ค้างชั่วคราว
+    setTimeout(() => {
+        executeMonteCarloLoop(targetVarName, minVal, maxVal, runs);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        closeSensitivityPanel();
+    }, 50);
+}
+
+function executeMonteCarloLoop(targetVarName, minVal, maxVal, runs) {
+    const tStart = parseFloat(document.getElementById('sim-start').value) || 0;
+    const tEnd = parseFloat(document.getElementById('sim-end').value) || 10;
+    const dt = parseFloat(document.getElementById('sim-dt').value) || 0.25;
+
+    let targetObj = sceneObjects.find(o => o.varShortName === targetVarName);
+    if (!targetObj) return;
+
+    // เก็บสมการดั้งเดิมไว้คืนค่าทีหลัง
+    const originalEquation = targetObj.varEquation;
+    let allRunsHistory = [];
+    let variables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
+    let stocks = variables.filter(v => v.type === 'rect');
+    let auxiliaries = variables.filter(v => v.type !== 'rect');
+
+    // วนลูป Monte Carlo
+    for (let r = 0; r < runs; r++) {
+        // 1. สุ่มค่าแบบ Uniform Distribution
+        let randomVal = minVal + Math.random() * (maxVal - minVal);
+        targetObj.varEquation = randomVal.toString(); // ยัดค่าสุ่มทับสมการเดิมชั่วคราว
+
+        let history = { time: [] };
+        variables.forEach(v => history[v.varShortName] = []);
+
+        // คอมไพล์สมการใหม่ทุกรอบ
+        let compiled = {};
+        variables.forEach(v => {
+            try { 
+                let parsedEq = (v.varEquation || '0').replace(/IF\s+THEN\s+ELSE/gi, 'IF_THEN_ELSE');
+                compiled[v.varShortName] = math.compile(parsedEq); 
+            } catch(e) { compiled[v.varShortName] = math.compile('0'); }
+        });
+
+        let currentScope = { Time: tStart };
+        
+        // ฟังก์ชันหน่วงเวลาสำหรับ Scope เฉพาะรอบนี้
+        const createDelayFunc = (scope, hist) => {
+            return function(varName, delayTime) {
+                let targetTime = scope.Time - delayTime; 
+                if (hist.time.length === 0 || targetTime < hist.time[0]) return 0;
+                for (let i = hist.time.length - 1; i >= 0; i--) {
+                    if (hist.time[i] <= targetTime + 0.0001) return hist[varName] ? hist[varName][i] : 0;
+                }
+                return 0;
+            };
+        };
+        
+        currentScope.DELAY = createDelayFunc(currentScope, history);
+        currentScope.IF = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
+        currentScope.IF_THEN_ELSE = function(condition, trueVal, falseVal) { return condition ? trueVal : falseVal; };
+
+        // เซ็ตค่าเริ่มต้น
+        auxiliaries.forEach(aux => currentScope[aux.varShortName] = 0);
+        stocks.forEach(s => {
+            try { currentScope[s.varShortName] = math.evaluate(s.varInitial || '0', currentScope); } 
+            catch(e) { currentScope[s.varShortName] = 0; }
+        });
+
+        function evaluateAuxiliaries(scope) {
+            for(let pass = 0; pass < auxiliaries.length + 1; pass++) {
+                auxiliaries.forEach(aux => {
+                    try {
+                        let evalResult = compiled[aux.varShortName].evaluate(scope);
+                        let val = evalResult && evalResult.type === 'Unit' ? evalResult.toNumber() : evalResult;
+                        scope[aux.varShortName] = (aux.isLookup && aux.lookupData) ? interpolateLookup(val, aux.lookupData) : val;
+                    } catch(e) {} 
+                });
+            }
+        }
+
+        function getRates(scope) {
+            evaluateAuxiliaries(scope);
+            let rates = {};
+            stocks.forEach(s => {
+                try {
+                    let netFlow = compiled[s.varShortName].evaluate(scope);
+                    rates[s.varShortName] = netFlow && netFlow.type === 'Unit' ? netFlow.toNumber() : netFlow;
+                } catch(e) { rates[s.varShortName] = 0; }
+            });
+            return rates;
+        }
+
+        // ลูปเวลา RK4
+        for(let t = tStart; t <= tEnd + (dt/10); t += dt) {
+            currentScope.Time = t;
+            evaluateAuxiliaries(currentScope);
+
+            history.time.push(parseFloat(t.toFixed(4)));
+            variables.forEach(v => history[v.varShortName].push(currentScope[v.varShortName] || 0));
+
+            let k1 = getRates(currentScope);
+
+            let scopeK2 = { ...currentScope, Time: t + dt / 2 };
+            scopeK2.DELAY = createDelayFunc(scopeK2, history);
+            scopeK2.IF = currentScope.IF; scopeK2.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK2[s.varShortName] = currentScope[s.varShortName] + (k1[s.varShortName] * dt / 2));
+            let k2 = getRates(scopeK2);
+
+            let scopeK3 = { ...currentScope, Time: t + dt / 2 };
+            scopeK3.DELAY = createDelayFunc(scopeK3, history);
+            scopeK3.IF = currentScope.IF; scopeK3.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK3[s.varShortName] = currentScope[s.varShortName] + (k2[s.varShortName] * dt / 2));
+            let k3 = getRates(scopeK3);
+
+            let scopeK4 = { ...currentScope, Time: t + dt };
+            scopeK4.DELAY = createDelayFunc(scopeK4, history);
+            scopeK4.IF = currentScope.IF; scopeK4.IF_THEN_ELSE = currentScope.IF_THEN_ELSE;
+            stocks.forEach(s => scopeK4[s.varShortName] = currentScope[s.varShortName] + (k3[s.varShortName] * dt));
+            let k4 = getRates(scopeK4);
+
+            stocks.forEach(s => {
+                let avgRate = (k1[s.varShortName] + 2 * k2[s.varShortName] + 2 * k3[s.varShortName] + k4[s.varShortName]) / 6;
+                currentScope[s.varShortName] = currentScope[s.varShortName] + (avgRate * dt);
+            });
+        }
+        allRunsHistory.push(history);
+    }
+
+    // คืนค่าสมการเดิม
+    targetObj.varEquation = originalEquation;
+
+    // นำผลลัพธ์ไปพล็อต
+    renderMonteCarloChart(allRunsHistory, variables, targetVarName);
+}
+
+function renderMonteCarloChart(allRunsHistory, variables, targetVarName) {
+    const ctxChart = document.getElementById('sim-chart').getContext('2d');
+    const colors = ['#FF3B30', '#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#FFCC00'];
+    let datasets = [];
+
+    // ดึงเฉพาะตัวแปรระดับ (Stocks) มาแสดงผลเป็นหลัก เพื่อไม่ให้กราฟดูรกเกินไป
+    let displayVars = variables.filter(v => v.type === 'rect');
+    if (displayVars.length === 0) displayVars = variables; // ถ้าไม่มี Stock ให้ดึงมาทั้งหมด
+
+    displayVars.forEach((v, vIdx) => {
+        let baseColor = colors[vIdx % colors.length];
+        
+        allRunsHistory.forEach((runHistory, rIdx) => {
+            datasets.push({
+                label: rIdx === 0 ? v.varShortName : '', // โชว์ชื่อตัวแปรใน Legend เฉพาะเส้นแรก
+                data: runHistory[v.varShortName],
+                borderColor: baseColor + '33', // เติมรหัส Hex 33 (ความโปร่งแสง ~20%) ให้เห็นเป็นเงาซ้อนกัน
+                backgroundColor: 'transparent',
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0, // ซ่อนจุดไข่ปลาเพื่อประสิทธิภาพการเรนเดอร์
+                borderWidth: 1.5
+            });
+        });
+    });
+
+    if (simChartInstance) simChartInstance.destroy();
+
+    simChartInstance = new Chart(ctxChart, {
+        type: 'line',
+        data: {
+            labels: allRunsHistory[0].time,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false, // ปิด Animation เพื่อให้กราฟ 50+ เส้นแสดงผลทันที
+            plugins: {
+                legend: { 
+                    position: 'right',
+                    labels: { filter: function(item) { return item.text !== ''; } } // ซ่อนกล่องสีที่ชื่อว่างเปล่า
+                },
+                title: { 
+                    display: true, 
+                    text: `Monte Carlo Sensitivity Analysis: ตัวแปรสุ่ม "${targetVarName}"`,
+                    font: { size: 16 }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Time', font: { weight: 'bold' } } },
+                y: { title: { display: true, text: 'Value', font: { weight: 'bold' } } }
+            }
+        }
+    });
 }
     </script>
 </body>
