@@ -226,6 +226,7 @@
             <label>ช่วงเวลา (dt): <input type="number" id="sim-dt" class="sim-input" value="0.25" step="0.05"></label>
             
 <button class="active" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="runSimulation()">▶️ คำนวณใหม่</button>
+<button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px; background-color: #007AFF;" onclick="openValidationPanel()">📊 เปรียบเทียบข้อมูลจริง</button>
 <button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px; background-color: #AF52DE;" onclick="openSensitivityPanel()">🎲 Sensitivity</button>
 <button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px;" onclick="exportSimulationCSV()">💾 ส่งออก CSV</button>
 
@@ -369,6 +370,31 @@
     <div style="display: flex; justify-content: flex-end; gap: 10px;">
         <button style="padding: 8px 20px; background: #AF52DE; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="runMonteCarlo()">▶️ รันแบบสุ่ม</button>
         <button style="padding: 8px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="closeSensitivityPanel()">ยกเลิก</button>
+    </div>
+</div>
+
+<div id="validation-panel" style="display: none; position: absolute; top: 15%; left: 50%; transform: translateX(-50%); width: 450px; background: white; z-index: 1200; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); padding: 20px; font-family: sans-serif;">
+    <h3 style="margin: 0 0 15px 0; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #333;">📊 ทดสอบความแม่นยำ (Validation)</h3>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; font-weight: bold; margin-bottom: 5px;">เลือกตัวแปรเปรียบเทียบ:</label>
+        <select id="val-var-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px;"></select>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        <label style="display: block; font-weight: bold; margin-bottom: 5px;">วางข้อมูลจริง (Copy จาก Excel 2 คอลัมน์: เวลา, ค่า):</label>
+        <textarea id="val-data-input" rows="6" placeholder="ตัวอย่าง:&#10;1   100&#10;2   120&#10;3   150" style="width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace;"></textarea>
+    </div>
+
+    <div id="val-result-box" style="display: none; margin-bottom: 15px; padding: 10px; border-radius: 6px; background: #f8f9fa; border: 1px solid #ddd; text-align: center;">
+        <div style="font-size: 14px; color: #555;">ความคลาดเคลื่อนเฉลี่ย (MAPE)</div>
+        <div id="val-mape-value" style="font-size: 24px; font-weight: bold; color: #333;">0.00%</div>
+        <div id="val-status" style="font-size: 13px; font-weight: bold; margin-top: 5px;"></div>
+    </div>
+    
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button style="padding: 8px 20px; background: #007AFF; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="processValidation()">ซ้อนทับกราฟ</button>
+        <button style="padding: 8px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="closeValidationPanel()">ปิด</button>
     </div>
 </div>
 
@@ -2914,6 +2940,161 @@ function renderMonteCarloChart(allRunsHistory, variables, targetVarName) {
             }
         }
     });
+}
+
+// ==========================================
+// ส่วนจัดการ Historical Data Validation
+// ==========================================
+
+let currentValidationData = null; // เก็บข้อมูลเปรียบเทียบที่พล็อตค้างไว้
+
+function openValidationPanel() {
+    // ต้องรัน Simulation ก่อนถึงจะเปรียบเทียบได้
+    if (!globalSimHistory || !globalSimHistory.history || globalSimHistory.history.time.length === 0) {
+        alert("กรุณากดปุ่ม '▶️ คำนวณใหม่' เพื่อรัน Simulation อย่างน้อย 1 ครั้งก่อนเปรียบเทียบครับ");
+        return;
+    }
+
+    const select = document.getElementById('val-var-select');
+    select.innerHTML = '';
+    
+    // ดึงรายชื่อตัวแปรทั้งหมดที่มีในกราฟมาให้เลือก
+    let variables = globalSimHistory.variables;
+    variables.forEach(v => {
+        let opt = document.createElement('option');
+        opt.value = v.varShortName;
+        opt.text = v.varShortName + (v.varFullName ? ` (${v.varFullName})` : '');
+        select.appendChild(opt);
+    });
+
+    document.getElementById('validation-panel').style.display = 'block';
+}
+
+function closeValidationPanel() {
+    document.getElementById('validation-panel').style.display = 'none';
+}
+
+function processValidation() {
+    const targetVarName = document.getElementById('val-var-select').value;
+    const rawText = document.getElementById('val-data-input').value;
+    
+    if (!targetVarName || rawText.trim() === '') {
+        alert("กรุณาวางข้อมูลเพื่อเปรียบเทียบครับ");
+        return;
+    }
+
+    // แปลงข้อความที่ Copy มา (รองรับทั้ง Tab และ Comma) ให้เป็น Array
+    const rows = rawText.trim().split(/\r?\n/);
+    let historicalPoints = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        let cols = rows[i].trim().split(/[\t, ]+/); // แยกคอลัมน์ด้วย Tab, Comma หรือ Space
+        if (cols.length >= 2) {
+            let tVal = parseFloat(cols[0]);
+            let yVal = parseFloat(cols[1]);
+            if (!isNaN(tVal) && !isNaN(yVal)) {
+                historicalPoints.push({ x: tVal, y: yVal });
+            }
+        }
+    }
+
+    if (historicalPoints.length < 2) {
+        alert("รูปแบบข้อมูลไม่ถูกต้อง กรุณาวางข้อมูลอย่างน้อย 2 แถว (คอลัมน์แรกคือเวลา, คอลัมน์สองคือค่า)");
+        return;
+    }
+
+    // เรียงลำดับตามเวลาเพื่อความชัวร์
+    historicalPoints.sort((a, b) => a.x - b.x);
+
+    // คำนวณความคลาดเคลื่อน (MAPE - Mean Absolute Percentage Error)
+    let simTime = globalSimHistory.history.time;
+    let simData = globalSimHistory.history[targetVarName];
+    let totalPercentageError = 0;
+    let countValidPoints = 0;
+
+    historicalPoints.forEach(histPt => {
+        // หาค่าจำลองที่เวลาใกล้เคียงที่สุด (Interpolation แบบง่าย)
+        let closestIdx = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < simTime.length; i++) {
+            let diff = Math.abs(simTime[i] - histPt.x);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIdx = i;
+            }
+        }
+        
+        let predictedY = simData[closestIdx];
+        let actualY = histPt.y;
+
+        if (actualY !== 0) { // ป้องกันการหารด้วยศูนย์
+            totalPercentageError += Math.abs((actualY - predictedY) / actualY);
+            countValidPoints++;
+        }
+    });
+
+    let mape = 0;
+    const resultBox = document.getElementById('val-result-box');
+    const mapeText = document.getElementById('val-mape-value');
+    const statusText = document.getElementById('val-status');
+
+    if (countValidPoints > 0) {
+        mape = (totalPercentageError / countValidPoints) * 100;
+        resultBox.style.display = 'block';
+        mapeText.innerText = mape.toFixed(2) + "%";
+
+        // ประเมินผลความแม่นยำ
+        if (mape <= 10) {
+            statusText.innerText = "✅ มีความแม่นยำสูงมาก (Highly Valid)";
+            statusText.style.color = "#155724";
+            resultBox.style.backgroundColor = "#d4edda";
+            resultBox.style.borderColor = "#c3e6cb";
+        } else if (mape <= 20) {
+            statusText.innerText = "⚠️ มีความแม่นยำพอใช้ (Acceptable)";
+            statusText.style.color = "#856404";
+            resultBox.style.backgroundColor = "#fff3cd";
+            resultBox.style.borderColor = "#ffeeba";
+        } else {
+            statusText.innerText = "❌ มีความคลาดเคลื่อนสูง (Needs Calibration)";
+            statusText.style.color = "#721c24";
+            resultBox.style.backgroundColor = "#f8d7da";
+            resultBox.style.borderColor = "#f5c6cb";
+        }
+    } else {
+        resultBox.style.display = 'none';
+        alert("ไม่สามารถคำนวณ Error ได้ เนื่องจากข้อมูลไม่ตรงกับช่วงเวลาในกราฟ");
+    }
+
+    // อัปเดตกราฟ Chart.js โดยเพิ่มเส้น Historical Data ลงไป
+    if (simChartInstance) {
+        // ลบเส้น Validation เดิมออกก่อน (ถ้ามี)
+        simChartInstance.data.datasets = simChartInstance.data.datasets.filter(ds => ds.id !== 'validation-dataset');
+        
+        // ค้นหาสีของตัวแปรเป้าหมายเพื่อใช้สีเดียวกันแต่ทำให้เป็นจุดประ
+        let targetDataset = simChartInstance.data.datasets.find(ds => ds.label.includes(targetVarName));
+        let baseColor = targetDataset ? targetDataset.borderColor : '#000000';
+
+        // สร้างชุดข้อมูลใหม่
+        let newDataset = {
+            id: 'validation-dataset',
+            label: `ข้อมูลจริง: ${targetVarName}`,
+            data: historicalPoints,
+            borderColor: '#333333',
+            backgroundColor: baseColor,
+            type: 'scatter',
+            pointStyle: 'rectRot',
+            pointRadius: 6,
+            pointBorderColor: '#000',
+            pointBorderWidth: 2,
+            showLine: true,
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false
+        };
+
+        simChartInstance.data.datasets.push(newDataset);
+        simChartInstance.update();
+    }
 }
     </script>
 </body>
