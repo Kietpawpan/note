@@ -199,6 +199,11 @@
                     </table>
                 </div>
                 <button style="margin-top: 10px; width: 100%; padding: 8px; background: #34C759; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="addLookupRow()">+ เพิ่มจุดข้อมูล</button>
+
+<button style="margin-top: 10px; width: 100%; padding: 8px; background: #34C759; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="addLookupRow()">+ เพิ่มจุดข้อมูล</button>
+<button style="margin-top: 10px; width: 100%; padding: 8px; background: #FF9500; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="document.getElementById('csv-import-input').click()">📂 นำเข้าไฟล์อนุกรมเวลา (.csv)</button>
+<input type="file" id="csv-import-input" accept=".csv" style="display: none;" onchange="importCSVData(event)">
+
             </div>
             <div style="flex: 2; position: relative;">
                 <canvas id="lookup-chart"></canvas>
@@ -219,7 +224,13 @@
             <label>เริ่ม (Start Time): <input type="number" id="sim-start" class="sim-input" value="0"></label>
             <label>สิ้นสุด (End Time): <input type="number" id="sim-end" class="sim-input" value="10"></label>
             <label>ช่วงเวลา (dt): <input type="number" id="sim-dt" class="sim-input" value="0.25" step="0.05"></label>
-            <button class="active" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="runSimulation()">▶️ คำนวณใหม่</button>
+            
+<button class="active" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold;" onclick="runSimulation()">▶️ คำนวณใหม่</button>
+<button class="action-btn" style="width: auto; height: auto; padding: 6px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; margin-left: 10px;" onclick="exportSimulationCSV()">💾 ส่งออก CSV</button>
+
+
+
+
         </div>
         <div style="flex: 1; position: relative; width: 100%;">
             <canvas id="sim-chart"></canvas>
@@ -369,6 +380,8 @@ math.import({
         return condition ? trueVal : falseVal;
     }
 }, { override: true });
+
+let globalSimHistory = null; // เพิ่มบรรทัดนี้เพื่อเก็บผลลัพธ์กราฟ
 
         let editingObject = null;
         let simChartInstance = null;
@@ -875,6 +888,10 @@ math.import({
                     currentScope[s.varShortName] = currentScope[s.varShortName] + (avgRate * dt);
                 });
             }
+
+// แทรกบรรทัดนี้ก่อน render กราฟ
+globalSimHistory = { history: history, variables: variables }; 
+
 
             renderSimulationChart(history, variables);
         }
@@ -2527,8 +2544,98 @@ function importProject(event) {
     reader.readAsText(file);
 }
 
+// ==========================================
+// ส่วนจัดการ Import / Export ข้อมูล CSV
+// ==========================================
 
+// ฟังก์ชันส่งออกผลลัพธ์ Simulation
+function exportSimulationCSV() {
+    if (!globalSimHistory || !globalSimHistory.history || globalSimHistory.history.time.length === 0) {
+        alert("ยังไม่มีผลการจำลอง กรุณากดปุ่ม '▶️ คำนวณใหม่' ก่อนส่งออกข้อมูลครับ");
+        return;
+    }
 
+    const { history, variables } = globalSimHistory;
+    // ใช้ \uFEFF บังคับให้ Excel อ่านภาษาไทย (UTF-8) ได้ถูกต้อง
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+    
+    // สร้าง Header (แถวแรก)
+    let headers = ["Time"];
+    variables.forEach(v => headers.push(v.varShortName));
+    csvContent += headers.join(",") + "\r\n";
+
+    // สร้างข้อมูลแต่ละช่วงเวลา (dt)
+    for (let i = 0; i < history.time.length; i++) {
+        let row = [history.time[i]];
+        variables.forEach(v => {
+            // ป้องกันค่า Undefined หรือ NaN
+            let val = history[v.varShortName][i];
+            row.push(val !== undefined ? val : 0);
+        });
+        csvContent += row.join(",") + "\r\n";
+    }
+
+    // สั่งดาวน์โหลด
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    
+    // ตั้งชื่อไฟล์ตามวันที่และเวลา
+    const dateStr = new Date().toISOString().slice(0, 19).replace(/T|:/g, '-');
+    link.setAttribute("download", `sd_result_${dateStr}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// ฟังก์ชันนำเข้าข้อมูลอนุกรมเวลาเข้าตาราง Lookup
+function importCSVData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        // รองรับทั้ง \n (Mac/Linux) และ \r\n (Windows)
+        const rows = text.split(/\r?\n/); 
+        let newData = [];
+
+        for (let i = 0; i < rows.length; i++) {
+            let cols = rows[i].trim().split(',');
+            
+            // ตรวจสอบว่ามีอย่างน้อย 2 คอลัมน์ (Time, Value)
+            if (cols.length >= 2) {
+                let xVal = parseFloat(cols[0]); // คอลัมน์ X (Time)
+                let yVal = parseFloat(cols[1]); // คอลัมน์ Y (Value)
+                
+                // ข้ามบรรทัดที่เป็นตัวหนังสือ (เช่น Header)
+                if (!isNaN(xVal) && !isNaN(yVal)) {
+                    newData.push({ x: xVal, y: yVal });
+                }
+            }
+        }
+
+        if (newData.length > 1) {
+            // เรียงลำดับแกน X จากน้อยไปมากเสมอ
+            newData.sort((a, b) => a.x - b.x);
+            currentLookupData = newData;
+            
+            if (editingObject) {
+                editingObject.lookupData = newData;
+            }
+            
+            renderLookupTable();
+            updateLookupChart();
+            alert(`✅ นำเข้าข้อมูลสำเร็จจำนวน ${newData.length} จุด\nระบบได้แปลงข้อมูลลงตารางเรียบร้อยแล้วครับ`);
+        } else {
+            alert("❌ รูปแบบไฟล์ไม่ถูกต้อง\nกรุณาใช้ไฟล์ CSV ที่มี 2 คอลัมน์ (เวลา, ค่าข้อมูล) และต้องเป็นตัวเลขอย่างน้อย 2 บรรทัดขึ้นไปครับ");
+        }
+        
+        event.target.value = ''; // รีเซ็ต input เผื่อต้องการโหลดไฟล์เดิมซ้ำ
+    };
+    reader.readAsText(file);
+}
     </script>
 </body>
 </html>
