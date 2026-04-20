@@ -334,9 +334,12 @@
             <button class="action-btn" onclick="resetView()" title="คืนมุมมองหน้าจอเริ่มต้น">🔍</button>
             
             <button class="action-btn" onclick="document.getElementById('file-input').click()" title="เปิดโปรเจกต์ (.json)">📂</button>
+<button class="action-btn" onclick="document.getElementById('image-upload-input').click()" title="แทรกรูปภาพจากเครื่อง">🖼️➕</button>
+<input type="file" id="image-upload-input" accept="image/*" style="display: none;" onchange="importImageToCanvas(event)">
             <button class="action-btn" onclick="exportProject()" title="บันทึกโปรเจกต์ (.json)">💾</button>
             
             <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ (.png)">🖼️</button>
+
             <button class="action-btn" onclick="shareImage()" title="แชร์รูปภาพ">📲</button>
             <button class="danger" onclick="clearBoard()" title="ลบภาพทั้งหมดบนกระดาน">🗑️</button>
         </div>
@@ -1303,7 +1306,7 @@ globalSimHistory = { history: history, variables: variables };
         }
 
         function snapshotOriginalPosition(obj) {
-            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h', 'image'].includes(obj.type)) {
                 obj._origX = obj.x;
                 obj._origY = obj.y;
             } else {
@@ -1570,11 +1573,19 @@ function cycleSelection() {
             if (fileName === null) return; 
             if (fileName.trim() === "") fileName = defaultName;
 
+            // คลีนออบเจ็กต์ก่อนเซฟ เอา img (DOM) ออกให้เหลือแต่ข้อมูล src ที่เป็น Base64
+            const cleanObjects = sceneObjects.map(obj => {
+                if (obj.type === 'image') {
+                    return { ...obj, img: null };
+                }
+                return obj;
+            });
+
             const projectData = {
                 version: "1.3",
                 timestamp: new Date().toISOString(),
                 camera: camera,
-                objects: sceneObjects 
+                objects: cleanObjects 
             };
 
             const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
@@ -1638,7 +1649,7 @@ function cycleSelection() {
 
         function getShapeBox(obj) {
             let box = null;
-            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+            if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h', 'image'].includes(obj.type)) {
                 let hPad = obj.type === 'short-line-h' ? 10 : 0;
                 box = { left: obj.x, right: obj.x + obj.w, top: obj.y - hPad, bottom: obj.y + obj.h + hPad, cx: obj.x + obj.w/2, cy: obj.y + obj.h/2 };
             } else if (obj.type === 'circle') {
@@ -2051,6 +2062,9 @@ function cycleSelection() {
                     ctx.lineWidth = obj.lineWidth || 4; ctx.strokeStyle = obj.color; ctx.fillStyle = obj.fillColor || '#ffffff';
                     ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2); ctx.fill();
                     if (obj.isDouble) { ctx.stroke(); ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.radius - 8, 0, Math.PI * 2); } ctx.stroke();
+
+        } else if (obj.type === 'image') { 
+    ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h); 
                 } else if (obj.type === 'arrow') {
                     if (obj.points) { if (obj.pathType.includes('rounded-angled')) { drawRoundedOrthogonalArrow(ctx, obj, false); } else { drawFreehandArrow(ctx, obj, false); } } 
                     else if (obj.p1 && obj.p2) { if (obj.pathType.includes('curved')) { drawCurvedArrow(ctx, obj); } else if (obj.pathType.includes('circle-')) { drawCircleTailArrow(ctx, obj); } }
@@ -2262,11 +2276,12 @@ function cycleSelection() {
                 }
             }
 
+
+
             for (let i = sceneObjects.length - 1; i >= 0; i--) {
                 const obj = sceneObjects[i];
                 if (obj.type === 'text') continue; 
-
-                if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'oval', 'diamond', 'parallelogram', 'short-line-h', 'image'].includes(obj.type)) {
                     let hPad = obj.type === 'short-line-h' ? 25 : 10;
                     let wPad = 10;
                     if (wx >= obj.x - wPad && wx <= obj.x + obj.w + wPad && wy >= obj.y - hPad && wy <= obj.y + obj.h + hPad) { return { index: i, object: obj }; }
@@ -2433,7 +2448,7 @@ function cycleSelection() {
                     const dx = worldPos.x - dragStartPoint.x, dy = worldPos.y - dragStartPoint.y;
                     let draggingList = multiSelectedObjects.length > 0 ? multiSelectedObjects : (selectedObject ? [selectedObject] : []);
                     draggingList.forEach(obj => {
-                        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h'].includes(obj.type)) {
+                        if (['rect', 'cloud', 'valve-h', 'valve-v', 'valve-poly', 'circle', 'text', 'oval', 'diamond', 'parallelogram', 'short-line-h', 'image'].includes(obj.type)) {
                             obj.x = obj._origX + dx; obj.y = obj._origY + dy;
                         } else {
                             if (obj.points && obj._origPoints) {
@@ -2590,6 +2605,7 @@ function importProject(event) {
             const data = JSON.parse(e.target.result);
             if (data.objects && data.camera) {
                 sceneObjects = data.objects;
+                let imagesPending = 0; 
 
                 sceneObjects.forEach(obj => {
                     if (obj.type === 'text' && obj.varLinked) {
@@ -2607,6 +2623,17 @@ function importProject(event) {
                             obj.varLinked = linkedShape;
                         }
                     }
+                    
+                    if (obj.type === 'image' && obj.src) {
+                        imagesPending++;
+                        const img = new Image();
+                        img.onload = () => {
+                            imagesPending--;
+                            if (imagesPending === 0) renderScene(); 
+                        };
+                        img.src = obj.src;
+                        obj.img = img; 
+                    }
                 });
 
                 camera = data.camera;
@@ -2615,7 +2642,8 @@ function importProject(event) {
                 document.getElementById('btn-delete-selected').style.display = 'none';
                 closePropertyPanel();
                 resetUndoCounter();
-                renderScene();
+                
+                if (imagesPending === 0) renderScene(); 
             } else { alert('รูปแบบไฟล์ไม่ถูกต้อง หรือไม่ใช่ไฟล์โปรเจกต์ที่สร้างจากระบบนี้'); }
         } catch (err) { alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ไฟล์อาจเสียหาย'); } 
         finally { input.value = ''; }
@@ -3307,6 +3335,46 @@ function runAutoCalibration() {
     // สั่งรันกราฟใหม่และซ้อนทับข้อมูลจริงให้อัตโนมัติ
     runSimulation();
     processValidation();
+}
+
+function importImageToCanvas(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            // คำนวณขนาดย่อส่วนไม่ให้ภาพล้นหน้าจอเกินไป
+            let maxWidth = canvas.width * 0.7 / camera.scale;
+            let maxHeight = canvas.height * 0.7 / camera.scale;
+            let scale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
+            
+            let w = img.width * scale;
+            let h = img.height * scale;
+            
+            // หาจุดกึ่งกลางหน้าจอเพื่อวางรูปภาพ
+            let rect = canvas.getBoundingClientRect();
+            let centerW = getWorldPos(rect.width / 2, rect.height / 2);
+
+            // ใช้ unshift เพื่อแทรกรูปไว้ล่างสุด (layer ล่างสุด) จะได้วาดทับได้
+            sceneObjects.unshift({
+                type: 'image',
+                img: img,
+                src: e.target.result, // เพิ่มการเก็บ src สำหรับเซฟ
+                x: centerW.x - w / 2,
+                y: centerW.y - h / 2,
+                w: w,
+                h: h
+            });
+            
+            resetUndoCounter();
+            renderScene();
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    event.target.value = ''; // รีเซ็ตค่าเพื่อให้โหลดไฟล์เดิมซ้ำได้
 }
     </script>
 </body>
