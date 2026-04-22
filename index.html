@@ -7,6 +7,8 @@
 
 <script src="math.js"></script>
 <script src="chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 
 <link rel="manifest" href="manifest.json">
     <style>
@@ -341,6 +343,7 @@
             <button class="action-btn" onclick="saveImage()" title="บันทึกรูปภาพ (.png)">🖼️</button>
 
             <button class="action-btn" onclick="shareImage()" title="แชร์รูปภาพ">📲</button>
+<button class="action-btn" onclick="exportModelToPDF()" title="ส่งออกรายงานตัวแปร (.pdf)" style="background-color: #FF2D55;">📄</button>
             <button class="danger" onclick="clearBoard()" title="ลบภาพทั้งหมดบนกระดาน">🗑️</button>
         </div>
     </div>
@@ -3376,6 +3379,106 @@ function importImageToCanvas(event) {
     reader.readAsDataURL(file);
     event.target.value = ''; // รีเซ็ตค่าเพื่อให้โหลดไฟล์เดิมซ้ำได้
 }
+
+function exportModelToPDF() {
+    // 1. กรองเอาเฉพาะตัวแปรที่มีข้อมูล
+    let variables = sceneObjects.filter(obj => obj.varShortName && obj.varShortName.trim() !== '');
+    
+    if (variables.length === 0) {
+        alert("ยังไม่มีข้อมูลตัวแปรในโมเดลครับ");
+        return;
+    }
+
+    // 2. เรียงลำดับตัวแปร
+    variables.sort((a, b) => {
+        const indexA = String(a.varIndex || "");
+        const indexB = String(b.varIndex || "");
+        return indexA.localeCompare(indexB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    // 3. สร้างโครงสร้างตาราง HTML แบบมินิมอล (งานวิจัย)
+    let tableHTML = `
+        <table style="width: 100%; border-collapse: collapse; font-family: 'Sarabun', sans-serif; font-size: 12pt;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="padding: 10px; text-align: center; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">ลำดับ</th>
+                    <th style="padding: 10px; text-align: left; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">ชื่อย่อ</th>
+                    <th style="padding: 10px; text-align: left; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">ชื่อเต็ม</th>
+                    <th style="padding: 10px; text-align: left; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">หน่วย</th>
+                    <th style="padding: 10px; text-align: left; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">สมการ</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    variables.forEach(v => {
+        tableHTML += `
+            <tr>
+                <td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">${v.varIndex || "-"}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${v.varShortName || "-"}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${v.varFullName || "-"}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${v.varUnit || "-"}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${v.varEquation || "-"}</td>
+            </tr>
+        `;
+    });
+    tableHTML += `</tbody></table>`;
+
+    const printDate = new Date().toLocaleString('th-TH');
+    
+    // 4. เปิดหน้าต่างใหม่เพื่อสร้างเอกสารรายงาน
+    const printWindow = window.open('', '', 'width=900,height=700');
+    
+    // 5. เขียนโครงสร้างเอกสารใส่หน้าต่างใหม่
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Model Report</title>
+                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+                <style>
+                    body { 
+                        font-family: 'Sarabun', sans-serif; 
+                        color: #000; 
+                        padding: 30px; 
+                    }
+                    .header { 
+                        font-size: 18pt; 
+                        font-weight: bold; 
+                        border-bottom: 2px solid #000; 
+                        padding-bottom: 10px; 
+                        margin-bottom: 20px; 
+                    }
+                    .footer { 
+                        margin-top: 30px; 
+                        font-size: 10pt; 
+                        text-align: right; 
+                    }
+                    /* ตั้งค่าขอบกระดาษตอนพรินต์เป็น PDF */
+                    @media print {
+                        @page { margin: 20mm; }
+                        body { padding: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">รายงานพารามิเตอร์แบบจำลอง (System Dynamics Model Report)</div>
+                ${tableHTML}
+                <div class="footer">วันที่พิมพ์: ${printDate}</div>
+            </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    
+    // 6. รอให้ฟอนต์โหลดเข้าเบราว์เซอร์ 0.5 วินาที แล้วสั่งเด้งหน้าต่าง Save as PDF อัตโนมัติ
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close(); // ปิดหน้าต่างพรีวิวอัตโนมัติเมื่อพรินต์/เซฟเสร็จ
+    }, 500);
+}
+
+
     </script>
 </body>
 </html>
